@@ -2,6 +2,7 @@
 #define SMASH_COMMAND_H_
 
 #include <vector>
+#include <string>
 
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
@@ -151,25 +152,29 @@ class BackgroundCommand : public BuiltInCommand {
   void execute() override;
 };
 
-// TODO: add more classes if needed 
+// TODO: add more classes if needed
 // maybe ls, timeout ?
 
 class SmallShell {
  private:
   // TODO: Add your data members
-  SmallShell();
+    std::string name;
+    SmallShell();
  public:
-  Command *CreateCommand(const char* cmd_line);
-  SmallShell(SmallShell const&)      = delete; // disable copy ctor
-  void operator=(SmallShell const&)  = delete; // disable = operator
-  static SmallShell& getInstance() // make SmallShell singleton
-  {
+    Command *CreateCommand(const char* cmd_line);
+    SmallShell(SmallShell const&)      = delete; // disable copy ctor
+    void operator=(SmallShell const&)  = delete; // disable = operator
+    static SmallShell& getInstance() // make SmallShell singleton
+    {
     static SmallShell instance; // Guaranteed to be destroyed.
     // Instantiated on first use.
+    instance.name = "smash";
     return instance;
-  }
-  ~SmallShell();
-  void executeCommand(const char* cmd_line);
+    }
+    ~SmallShell();
+    void executeCommand(const char* cmd_line);
+    const std::string getName(){return name;}
+
   // TODO: add extra methods as needed
 };
 

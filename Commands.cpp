@@ -82,7 +82,7 @@ void _removeBackgroundSign(char* cmd_line) {
   cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
-// TODO: Add your implementation for classes in Commands.h 
+// TODO: Add your implementation for classes in Commands.h
 
 SmallShell::SmallShell() {
 // TODO: add your implementation
@@ -97,24 +97,25 @@ SmallShell::~SmallShell() {
 */
 Command * SmallShell::CreateCommand(const char* cmd_line) {
 	// For example:
-/*
+
   string cmd_s = string(cmd_line);
   if (cmd_s.find("pwd") == 0) {
     return new GetCurrDirCommand(cmd_line);
   }
-  else if ...
-  .....
+  else if (cmd_s.find("chprompt") == 0) {
+
+  }
   else {
     return new ExternalCommand(cmd_line);
   }
-  */
+
   return nullptr;
 }
 
 void SmallShell::executeCommand(const char *cmd_line) {
   // TODO: Add your implementation here
   // for example:
-  // Command* cmd = CreateCommand(cmd_line);
-  // cmd->execute();
+  Command* cmd = CreateCommand(cmd_line);
+  cmd->execute();
   // Please note that you must fork smash process for some commands (e.g., external commands....)
 }
