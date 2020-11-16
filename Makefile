@@ -23,9 +23,16 @@ $(SMASH_BIN): $(OBJS)
 $(OBJS): %.o: %.cpp
 	$(COMPILER) $(COMPILER_FLAGS) -c $^
 
+Debug: $(SMASH_BIN)
+
+
 zip: $(SRCS) $(HDRS)
 	zip $(SUBMITTERS).zip $^ submitters.txt Makefile
 
 clean:
-	rm -rf $(SMASH_BIN) $(OBJS) $(TESTS_OUTPUTS) 
+	rm -rf $(SMASH_BIN) $(OBJS) $(TESTS_OUTPUTS)
+	rm -rf $(SUBMITTERS).zip
+
+cleanDebug:
+	rm -rf $(SMASH_BIN) $(OBJS) $(TESTS_OUTPUTS)
 	rm -rf $(SUBMITTERS).zip
