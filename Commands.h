@@ -9,11 +9,15 @@
 #define HISTORY_MAX_RECORDS (50)
 
 using std::string;
+using std::vector;
+enum State {Foreground, Background, Stopped};
 
+class SmallShell;
 class Command {
     // TODO: Add your data members
 protected:
-    char* args[COMMAND_MAX_ARGS];
+    string  cmd_line;
+    char*   args[COMMAND_MAX_ARGS];
 public:
     Command(const char* cmd_line);
     virtual ~Command();
@@ -64,18 +68,26 @@ public:
     void execute() override;
 };
 
-class ChangePromptCommand : public BuiltInCommand {
-    // TODO: Add your data members
-public:
-    ChangePromptCommand(const char* cmd_line);
-    virtual ~ChangePromptCommand();
-    void execute() override;
-};
-
 class GetCurrDirCommand : public BuiltInCommand {
 public:
     GetCurrDirCommand(const char* cmd_line);
     virtual ~GetCurrDirCommand();
+    void execute() override;
+};
+
+class GetDirContentCommand : public BuiltInCommand {
+public:
+    GetDirContentCommand(const char* cmd_line);
+    virtual ~GetDirContentCommand();
+    void execute() override;
+};
+
+class ChangePromptCommand : public BuiltInCommand {
+protected:
+    SmallShell* smash_p;
+public:
+    ChangePromptCommand(const char* cmd_line, SmallShell* smash_p);
+    virtual ~ChangePromptCommand();
     void execute() override;
 };
 
@@ -99,8 +111,15 @@ class JobsList {
 public:
     class JobEntry {
     // TODO: Add your data members
+    //public:
+        int job_id;
+        State state;
+        Command* cmd;
     };
+private:
 // TODO: Add your data members
+    vector<JobEntry> stopped_jobs;
+    vector<JobEntry> running_jobs;
 public:
     JobsList();
     ~JobsList();
@@ -153,7 +172,7 @@ public:
 class SmallShell {
 private:
 // TODO: Add your data members
-    std::string name;
+    string name;
     SmallShell();
 public:
     Command *CreateCommand(const char* cmd_line);
@@ -168,7 +187,8 @@ public:
     }
     ~SmallShell();
     void executeCommand(const char* cmd_line);
-    const std::string getName(){return name;}
+    const string getName();
+    const string setName(const string new_name = "smash");
 
 // TODO: add extra methods as needed
 };

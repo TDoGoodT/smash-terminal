@@ -1,3 +1,4 @@
+#include <dirent.h>
 #include <unistd.h>
 #include <string.h>
 #include <iostream>
@@ -83,6 +84,14 @@ void _removeBackgroundSign(char* cmd_line) {
   cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
+
+static const string _getCurrDir()
+{
+    char buff[BUFSIZ];
+    getcwd(buff, BUFSIZ);
+    return string(buff);
+}
+
 // TODO: Add your implementation for classes in Commands.h
 
 SmallShell::SmallShell() {
@@ -92,10 +101,21 @@ SmallShell::SmallShell() {
 SmallShell::~SmallShell() {
 // TODO: add your implementation
 }
+const string SmallShell::getName()
+{
+    return name;
+}
+const string SmallShell::setName(const string new_name)
+{
+    string old_name(name);
+    name = new_name;
+    return old_name;
+}
 
 Command::Command(const char* cmd_line) {
 // TODO: add your implementation
-    _parseCommandLine(cmd_line, this->args);
+    this->cmd_line = string(cmd_line);
+    _parseCommandLine(cmd_line, args);
 }
 
 Command::~Command() {
@@ -108,30 +128,100 @@ BuiltInCommand::BuiltInCommand(const char* cmd_line):
 // TODO: add your implementation
 }
 
-BuiltInCommand::~BuiltInCommand() {
+BuiltInCommand::~BuiltInCommand()
+{
 // TODO: add your implementation
 }
 
-void BuiltInCommand::execute(){
+void BuiltInCommand::execute()
+{
 // TODO: add your implementation
+}
+
+
+ExternalCommand::ExternalCommand(const char* cmd_line):
+    Command(cmd_line)
+{
+// TODO: add your implementation
+}
+
+ExternalCommand::~ExternalCommand()
+{
+// TODO: add your implementation
+}
+
+
+void ExternalCommand::execute()
+{
+// TODO: add your implementation
+    int *return_status = NULL;
+    pid_t c_pid;
+    c_pid = fork();
+    if(c_pid > 0)
+    {
+        cout << "start\n";
+        waitpid(c_pid, return_status,0);
+        cout << "end\n";
+    }
+    else if(c_pid < 0){ sleep(100);}
+    else
+    {
+        const char argv[1][COMMAND_MAX_ARGS] = {(string("-c \"") + cmd_line + string("\"")).c_str()};
+
+        execv("/bin/bash",NULL);
+    }
 }
 
 GetCurrDirCommand::GetCurrDirCommand(const char* cmd_line):
-    BuiltInCommand(cmd_line){
+    BuiltInCommand(cmd_line)
+{
 // TODO: add your implementation
 }
 
-GetCurrDirCommand::~GetCurrDirCommand(){
+GetCurrDirCommand::~GetCurrDirCommand()
+{
 // TODO: add your implementation
 }
+
 void GetCurrDirCommand::execute(){
-// TODO: add your implementation
-    char buff[BUFSIZ];
-    getcwd(buff, BUFSIZ);
-    cout << buff << "\n";
+// TODO: test
+    cout << _getCurrDir() << "\n";
 }
 
-ChangePromptCommand::ChangePromptCommand(const char* cmd_line): BuiltInCommand(cmd_line){
+
+GetDirContentCommand::GetDirContentCommand(const char* cmd_line):
+    BuiltInCommand(cmd_line)
+{
+// TODO: add your implementation
+}
+
+GetDirContentCommand::~GetDirContentCommand()
+{
+// TODO: add your implementation
+}
+
+void GetDirContentCommand::execute()
+{
+// TODO: add your implementation
+    struct dirent **namelist;
+    int n = scandir(".", &namelist, 0, alphasort);
+    if (n < 0) perror("smash error: scandir failed");
+    else
+    {
+        for (int i = 0; i < n; i++)
+        {
+            cout << namelist[i]->d_name << "\n";
+            free(namelist[i]);
+        }
+    }
+    free(namelist);
+
+}
+
+
+ChangePromptCommand::ChangePromptCommand(const char* cmd_line, SmallShell* smash_p):
+    BuiltInCommand(cmd_line),
+    smash_p(smash_p){
 // TODO: add your implementation
 }
 
@@ -139,8 +229,24 @@ ChangePromptCommand::~ChangePromptCommand(){
 // TODO: add your implementation
 }
 void ChangePromptCommand::execute(){
-// TODO: add your implementation
+// TODO: test
+    if(!args[1]) smash_p->setName();
+    else smash_p->setName(args[1]);
 }
+
+
+/*
+JobsList::JobsList(){}
+JobsList::~JobsList(){}
+void JobsList::addJob(Command* cmd, bool isStopped = false){}
+void JobsList::printJobsList(){}
+void JobsList::killAllJobs(){}
+void JobsList::removeFinishedJobs(){}
+JobsList::JobEntry * JobsList::getJobById(int jobId){}
+void JobsList::removeJobById(int jobId){}
+JobsList::JobEntry * JobsList::getLastJob(int* lastJobId){}
+JobsList::JobEntry *JobsList::getLastStoppedJob(int *jobId){}
+*/
 
 /**
 * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
@@ -150,31 +256,33 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     char* args[COMMAND_MAX_ARGS];
     _parseCommandLine(cmd_line, args);
 //Get the first word in the command
-    string cmd_s = string(args[0]);
+    string cmd_s(args[0]);
     if (cmd_s == "pwd") {
         return new GetCurrDirCommand(cmd_line);
     }
 
     else if (cmd_s == "chprompt") {
-        return new ChangePromptCommand(cmd_line);
+        return new ChangePromptCommand(cmd_line, this);
     }
-    /*
+    else if (cmd_s == "ls") {
+        return new GetDirContentCommand(cmd_line);
+    }
+
     else {
     return new ExternalCommand(cmd_line);
     }
-    */
-    return nullptr;
+
+    //return nullptr;
 }
 
 void SmallShell::executeCommand(const char *cmd_line) {
     // TODO: Add your implementation here
     // for example:
     Command* cmd = CreateCommand(cmd_line);
-    if(cmd)
-    {
-        cmd->execute();
-        delete cmd;
-    }
+
+    cmd->execute();
+//    delete cmd;
+
     // Please note that you must fork smash process for some commands (e.g., external commands....)
 }
 
