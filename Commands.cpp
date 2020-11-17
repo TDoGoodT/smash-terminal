@@ -5,6 +5,7 @@
 #include <sstream>
 #include <sys/wait.h>
 #include <iomanip>
+
 #include "Commands.h"
 
 using namespace std;
@@ -92,30 +93,88 @@ SmallShell::~SmallShell() {
 // TODO: add your implementation
 }
 
+Command::Command(const char* cmd_line) {
+// TODO: add your implementation
+    _parseCommandLine(cmd_line, this->args);
+}
+
+Command::~Command() {
+// TODO: add your implementation
+}
+
+BuiltInCommand::BuiltInCommand(const char* cmd_line):
+    Command(cmd_line)
+{
+// TODO: add your implementation
+}
+
+BuiltInCommand::~BuiltInCommand() {
+// TODO: add your implementation
+}
+
+void BuiltInCommand::execute(){
+// TODO: add your implementation
+}
+
+GetCurrDirCommand::GetCurrDirCommand(const char* cmd_line):
+    BuiltInCommand(cmd_line){
+// TODO: add your implementation
+}
+
+GetCurrDirCommand::~GetCurrDirCommand(){
+// TODO: add your implementation
+}
+void GetCurrDirCommand::execute(){
+// TODO: add your implementation
+    char buff[BUFSIZ];
+    getcwd(buff, BUFSIZ);
+    cout << buff << "\n";
+}
+
+ChangePromptCommand::ChangePromptCommand(const char* cmd_line): BuiltInCommand(cmd_line){
+// TODO: add your implementation
+}
+
+ChangePromptCommand::~ChangePromptCommand(){
+// TODO: add your implementation
+}
+void ChangePromptCommand::execute(){
+// TODO: add your implementation
+}
+
 /**
 * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
 */
 Command * SmallShell::CreateCommand(const char* cmd_line) {
-	// For example:
-/*
-  string cmd_s = string(cmd_line);
-  if (cmd_s.find("pwd") == 0) {
-    return new GetCurrDirCommand(cmd_line);
-  }
-  else if (cmd_s.find("chprompt") == 0) {
+//Parse arguments
+    char* args[COMMAND_MAX_ARGS];
+    _parseCommandLine(cmd_line, args);
+//Get the first word in the command
+    string cmd_s = string(args[0]);
+    if (cmd_s == "pwd") {
+        return new GetCurrDirCommand(cmd_line);
+    }
 
-  }
-  else {
+    else if (cmd_s == "chprompt") {
+        return new ChangePromptCommand(cmd_line);
+    }
+    /*
+    else {
     return new ExternalCommand(cmd_line);
-  }
-*/
-  return nullptr;
+    }
+    */
+    return nullptr;
 }
 
 void SmallShell::executeCommand(const char *cmd_line) {
-  // TODO: Add your implementation here
-  // for example:
-  Command* cmd = CreateCommand(cmd_line);
-  cmd->execute();
-  // Please note that you must fork smash process for some commands (e.g., external commands....)
+    // TODO: Add your implementation here
+    // for example:
+    Command* cmd = CreateCommand(cmd_line);
+    if(cmd)
+    {
+        cmd->execute();
+        delete cmd;
+    }
+    // Please note that you must fork smash process for some commands (e.g., external commands....)
 }
+

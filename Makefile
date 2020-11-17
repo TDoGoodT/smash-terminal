@@ -2,6 +2,7 @@
 SUBMITTERS := 313350035_
 COMPILER := g++
 COMPILER_FLAGS := --std=c++11 -Wall
+DEBUG_COMPILER_FLAGS := -DDEBUG -g
 SRCS := Commands.cpp signals.cpp smash.cpp
 OBJS=$(subst .cpp,.o,$(SRCS))
 HDRS := Commands.h signals.h
@@ -23,9 +24,6 @@ $(SMASH_BIN): $(OBJS)
 $(OBJS): %.o: %.cpp
 	$(COMPILER) $(COMPILER_FLAGS) -c $^
 
-Debug: $(SMASH_BIN)
-
-
 zip: $(SRCS) $(HDRS)
 	zip $(SUBMITTERS).zip $^ submitters.txt Makefile
 
@@ -33,6 +31,6 @@ clean:
 	rm -rf $(SMASH_BIN) $(OBJS) $(TESTS_OUTPUTS)
 	rm -rf $(SUBMITTERS).zip
 
-cleanDebug:
+cleansmash:
 	rm -rf $(SMASH_BIN) $(OBJS) $(TESTS_OUTPUTS)
 	rm -rf $(SUBMITTERS).zip
