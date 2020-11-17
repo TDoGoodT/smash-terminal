@@ -163,12 +163,13 @@ void ExternalCommand::execute()
         waitpid(c_pid, return_status,0);
         cout << "end\n";
     }
-    else if(c_pid < 0){ sleep(100);}
     else
     {
-        const char argv[1][COMMAND_MAX_ARGS] = {(string("-c \"") + cmd_line + string("\"")).c_str()};
-
-        execv("/bin/bash",NULL);
+        char cmd[COMMAND_MAX_ARGS*(2+COMMAND_ARGS_MAX_LENGTH)];
+        strcpy(cmd, cmd_line.c_str());
+        cout << cmd << "\n";
+        char *argv[] ={"bash", "-c", cmd, NULL};
+        execv("/bin/bash",argv);
     }
 }
 

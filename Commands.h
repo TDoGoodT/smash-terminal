@@ -10,7 +10,7 @@
 
 using std::string;
 using std::vector;
-enum State {Foreground, Background, Stopped};
+enum State {Foreground, Background, Stopped, Zombie};
 
 class SmallShell;
 class Command {
