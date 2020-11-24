@@ -145,6 +145,7 @@ public:
 private:
 // TODO: Add your data members
     list<JobEntry*>     waiting_queue;
+    list<JobEntry*>     runing_queue;
     vector<int>         free_job_ids;
     map<int,JobEntry*>  jobs_map;
     int _getValidJobId()
