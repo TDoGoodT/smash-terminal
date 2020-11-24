@@ -1,11 +1,14 @@
 #include <dirent.h>
+#include <algorithm>
 #include <unistd.h>
 #include <string.h>
 #include <iostream>
 #include <vector>
 #include <sstream>
-#include <sys/wait.h>
 #include <iomanip>
+#include <signal.h>
+#include <string>
+
 
 #include "Commands.h"
 
@@ -61,7 +64,7 @@ int _parseCommandLine(const char* cmd_line, char** args) {
   FUNC_EXIT()
 }
 
-bool _isBackgroundComamnd(const char* cmd_line) {
+bool _isBackgroundCommand(const char* cmd_line) {
   const string str(cmd_line);
   return str[str.find_last_not_of(WHITESPACE)] == '&';
 }
@@ -94,9 +97,8 @@ static const string _getCurrDir()
 
 // TODO: Add your implementation for classes in Commands.h
 
-SmallShell::SmallShell() {
-// TODO: add your implementation
-}
+SmallShell::SmallShell():
+    name("smash"), jobs(){}
 
 SmallShell::~SmallShell() {
 // TODO: add your implementation
@@ -111,41 +113,30 @@ const string SmallShell::setName(const string new_name)
     name = new_name;
     return old_name;
 }
+/*
+void SmallShell::addJob(Command* cmd,  pid_t pid, bool isStopped)
+{
+    this->jobs.addJob(cmd,pid);
+}*/
 
 Command::Command(const char* cmd_line) {
 // TODO: add your implementation
     this->cmd_line = string(cmd_line);
-    _parseCommandLine(cmd_line, args);
+    char new_cmd_line[this->cmd_line.length()+1];
+
+    strcpy(new_cmd_line, cmd_line);
+    if(_isBackgroundCommand(cmd_line))
+    {
+        _removeBackgroundSign(new_cmd_line);
+        type = Background;
+    } else type = Foreground;
+    this->cmd_line = string(new_cmd_line);
+    _parseCommandLine(new_cmd_line, args);
 }
 
-Command::~Command() {
-// TODO: add your implementation
-}
 
-BuiltInCommand::BuiltInCommand(const char* cmd_line):
-    Command(cmd_line)
-{
-// TODO: add your implementation
-}
-
-BuiltInCommand::~BuiltInCommand()
-{
-// TODO: add your implementation
-}
 
 void BuiltInCommand::execute()
-{
-// TODO: add your implementation
-}
-
-
-ExternalCommand::ExternalCommand(const char* cmd_line):
-    Command(cmd_line)
-{
-// TODO: add your implementation
-}
-
-ExternalCommand::~ExternalCommand()
 {
 // TODO: add your implementation
 }
@@ -155,33 +146,22 @@ void ExternalCommand::execute()
 {
 // TODO: add your implementation
     int *return_status = NULL;
-    pid_t c_pid;
-    c_pid = fork();
+    pid_t c_pid = fork();
     if(c_pid > 0)
     {
-        cout << "start\n";
-        waitpid(c_pid, return_status,0);
-        cout << "end\n";
+        int option = type == Foreground ? 0 : WNOHANG;
+        if(!waitpid(c_pid, return_status, option))
+        {
+            smash_p->jobs.addJob(this,c_pid);
+        }
     }
     else
     {
         char cmd[COMMAND_MAX_ARGS*(2+COMMAND_ARGS_MAX_LENGTH)];
         strcpy(cmd, cmd_line.c_str());
-        cout << cmd << "\n";
         char *argv[] ={"bash", "-c", cmd, NULL};
         execv("/bin/bash",argv);
     }
-}
-
-GetCurrDirCommand::GetCurrDirCommand(const char* cmd_line):
-    BuiltInCommand(cmd_line)
-{
-// TODO: add your implementation
-}
-
-GetCurrDirCommand::~GetCurrDirCommand()
-{
-// TODO: add your implementation
 }
 
 void GetCurrDirCommand::execute(){
@@ -190,16 +170,6 @@ void GetCurrDirCommand::execute(){
 }
 
 
-GetDirContentCommand::GetDirContentCommand(const char* cmd_line):
-    BuiltInCommand(cmd_line)
-{
-// TODO: add your implementation
-}
-
-GetDirContentCommand::~GetDirContentCommand()
-{
-// TODO: add your implementation
-}
 
 void GetDirContentCommand::execute()
 {
@@ -217,37 +187,55 @@ void GetDirContentCommand::execute()
     }
     free(namelist);
 
+
 }
 
 
-ChangePromptCommand::ChangePromptCommand(const char* cmd_line, SmallShell* smash_p):
-    BuiltInCommand(cmd_line),
-    smash_p(smash_p){
-// TODO: add your implementation
-}
-
-ChangePromptCommand::~ChangePromptCommand(){
-// TODO: add your implementation
-}
 void ChangePromptCommand::execute(){
 // TODO: test
-    if(!args[1]) smash_p->setName();
-    else smash_p->setName(args[1]);
+    if(!args[1]) smash_p->setName(); // no args -> set name to be "smash"
+    else smash_p->setName(args[1]); // else -> set shell name to be the 1st argument
 }
 
+void JobsCommand::execute()
+{
+// TODO: add your implementation
+    jobs->printJobsList();
+}
 
-/*
-JobsList::JobsList(){}
-JobsList::~JobsList(){}
-void JobsList::addJob(Command* cmd, bool isStopped = false){}
-void JobsList::printJobsList(){}
-void JobsList::killAllJobs(){}
-void JobsList::removeFinishedJobs(){}
-JobsList::JobEntry * JobsList::getJobById(int jobId){}
-void JobsList::removeJobById(int jobId){}
-JobsList::JobEntry * JobsList::getLastJob(int* lastJobId){}
-JobsList::JobEntry *JobsList::getLastStoppedJob(int *jobId){}
-*/
+bool is_number(const std::string& s)
+{
+    return !s.empty() && std::find_if(s.begin(),
+        s.end(), [](unsigned char c) { return !std::isdigit(c); }) == s.end();
+}
+
+void ForegroundCommand::execute(){
+// TODO: test
+    if(args[1])
+        if(is_number(string(args[1]))) job_id = std::stoi(args[1]);
+        else
+        {
+            perror("smash error: fg: invalid arguments");
+            return;
+        }
+    JobsList::JobEntry* last_stopped = (job_id > 0) ? jobs->getJobById(job_id): jobs->getLastStoppedJob(&job_id);
+    if(!last_stopped)
+    {
+        string error_s;
+        if(!job_id)
+            error_s = string("smash error: fg: jobs list is empty");
+        else
+            error_s = string("smash error: fg: job-id ",job_id) + string( " does not exist");
+        perror(error_s.c_str());
+        return;
+    }
+    if(kill(last_stopped->pid,SIGCONT) == 0)
+    {
+        cout << cmd_line.c_str() << " : " << last_stopped->pid << "\n";
+        waitpid(last_stopped->pid,NULL,0);
+    }
+}
+
 
 /**
 * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
@@ -268,9 +256,15 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     else if (cmd_s == "ls") {
         return new GetDirContentCommand(cmd_line);
     }
+    else if (cmd_s == "jobs") {
+        return new JobsCommand(cmd_line, &jobs);
+    }
+    else if (cmd_s == "fg") {
+        return new ForegroundCommand(cmd_line, &jobs);
+    }
 
     else {
-    return new ExternalCommand(cmd_line);
+    return new ExternalCommand(cmd_line, this);
     }
 
     //return nullptr;
@@ -280,7 +274,7 @@ void SmallShell::executeCommand(const char *cmd_line) {
     // TODO: Add your implementation here
     // for example:
     Command* cmd = CreateCommand(cmd_line);
-
+    jobs.removeFinishedJobs();
     cmd->execute();
 //    delete cmd;
 
