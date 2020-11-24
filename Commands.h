@@ -165,7 +165,8 @@ public:
         int new_job_id = MAX_NUM_PROC - _getValidJobId();
         ExecState state = isStopped ? Waiting : Running;
         JobEntry* new_job = new JobEntry(new_job_id, pid, state, cmd);
-        waiting_queue.push_back(new_job);
+        if(isStopped) waiting_queue.push_back(new_job);
+        else runing_queue.push_back(new_job);
         jobs_map[new_job_id] = new_job;
 
     }
@@ -219,12 +220,13 @@ public:
     }
     JobEntry * getLastJob(int* lastJobId)
     {
-        if(waiting_queue.back() != nullptr && lastJobId) *lastJobId = waiting_queue.back()->job_id;
-        return waiting_queue.back();
+        if(runing_queue.back() != nullptr && lastJobId) *lastJobId = runing_queue.back()->job_id;
+        return runing_queue.back();
     }
     JobEntry *getLastStoppedJob(int *jobId)
     {
-        return getLastJob(jobId);
+        if(waiting_queue.back() != nullptr && jobId) *jobId = waiting_queue.back()->job_id;
+        return waiting_queue.back();
     }
 // TODO: Add extra methods or modify exisitng ones as needed
 };

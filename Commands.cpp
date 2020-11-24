@@ -225,7 +225,7 @@ void ForegroundCommand::execute(){
         if(!job_id)
             error_s = string("smash error: fg: jobs list is empty");
         else
-            error_s = string("smash error: fg: job-id ",job_id) + string( " does not exist");
+            error_s = string("smash error: fg: job-id ") + std::to_string(job_id) + string( " does not exist");
         perror(error_s.c_str());
         return;
     }
