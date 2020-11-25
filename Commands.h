@@ -212,9 +212,11 @@ public:
     }
     void removeJobById(int jobId)
     {
+        assert(jobId > 0);
         JobEntry* job = jobs_map[jobId];
         if(job)
         {
+            std::cout << "removing " << jobId << std::endl;
             waiting_queue.remove(job);
             running_queue.remove(job);
             jobs_map.erase(jobId);
@@ -282,7 +284,10 @@ public:
     void switchOn(JobEntry* job, bool move_to_fg = false)
     {
         assert((move_to_fg && fg_job) == 0);
-        if(move_to_fg) fg_job = job;
+        if(move_to_fg)
+        {
+            fg_job = job;
+        }
         waiting_queue.remove(job);
         running_queue.push_back(job);
         job->execution_state = Running;

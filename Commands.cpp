@@ -154,7 +154,7 @@ void ExternalCommand::execute()
             JobsList::JobEntry* new_job = new JobsList::JobEntry(0, c_pid, Running, this);
             smash_p->jobs.fg_job = new_job;
             waitpid(c_pid, NULL, 0);
-//            smash_p->jobs.fg_job = nullptr;
+            smash_p->jobs.removeJob(smash_p->jobs.fg_job);
         }
         else
         {
@@ -249,10 +249,19 @@ void ForegroundCommand::execute(){
         perror(error_s.c_str());
         return;
     }
-    jobs->switchOn(job, true);
+    if(*std::find(jobs->waiting_queue.begin(), jobs->waiting_queue.end(), job))
+    {
+        jobs->switchOn(job, true);
+    }
+    else
+    {
+        assert(jobs->fg_job == nullptr);
+        jobs->fg_job = job;
+    }
     cout << cmd_line.c_str() << " : " << job->pid << "\n";
-    jobs->removeJobById(job_id);
+    //jobs->removeJobById(job_id);
     waitpid(job->pid,NULL,0);
+    jobs->removeJob(job);
 }
 
 
