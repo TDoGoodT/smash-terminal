@@ -14,7 +14,10 @@ void ctrlZHandler(int sig_num)
 	// TODO: Add your implementation
     std::cout << "\nsmash: got ctrl-Z in ";
     SmallShell& smash = SmallShell::getInstance();
-    if(smash.jobs.fg_job) smash.jobs.switchOff(smash.jobs.fg_job);
+    smash.jobs.switchOff(smash.jobs.getLastJob());
+    //if(smash.smash_pid != getpid())
+    //kill(smash.smash_pid*-1, SIGCONT);
+    return;
 }
 
 void ctrlCHandler(int sig_num)

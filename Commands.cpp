@@ -98,7 +98,7 @@ static const string _getCurrDir()
 // TODO: Add your implementation for classes in Commands.h
 
 SmallShell::SmallShell():
-    name("smash"), jobs(){}
+    name("smash"), jobs(), smash_pid(getpid()) {}
 
 SmallShell::~SmallShell() {
 // TODO: add your implementation
@@ -153,8 +153,8 @@ void ExternalCommand::execute()
             assert(smash_p->jobs.fg_job == nullptr);
             JobsList::JobEntry* new_job = new JobsList::JobEntry(0, c_pid, Running, this);
             smash_p->jobs.fg_job = new_job;
-            waitpid(c_pid, NULL, 0);
-            smash_p->jobs.removeJob(smash_p->jobs.fg_job);
+            while(!waitpid(c_pid, NULL, WNOHANG) && smash_p->jobs.fg_job) {}
+            if(smash_p->jobs.fg_job) smash_p->jobs.removeJob(smash_p->jobs.fg_job);
         }
         else
         {

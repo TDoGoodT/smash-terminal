@@ -249,12 +249,13 @@ public:
             delete job;
         }
     }
-    JobEntry * getLastJob(int* lastJobId)
+    JobEntry * getLastJob(int* lastJobId = nullptr)
     {
+        if(fg_job) return fg_job;
         if(running_queue.back() != nullptr && lastJobId) *lastJobId = running_queue.back()->job_id;
         return running_queue.back();
     }
-    JobEntry *getLastStoppedJob(int *jobId)
+    JobEntry *getLastStoppedJob(int *jobId = nullptr)
     {
         if(waiting_queue.back() != nullptr && jobId) *jobId = waiting_queue.back()->job_id;
         return waiting_queue.back();
@@ -267,6 +268,7 @@ public:
 // TODO: Add extra methods or modify exisitng ones as needed
     void switchOff(JobEntry* job)
     {
+        if(!job) return;
         if(fg_job == job) {
             fg_job = nullptr;
             if(job->job_id == 0)
@@ -278,7 +280,7 @@ public:
         running_queue.remove(job);
         waiting_queue.push_back(job);
         job->execution_state = Waiting;
-        if(kill(job->pid*-1, SIGSTOP) >= 0)
+        kill(job->pid, SIGSTOP);
         std::cout << "smash: process " << job->pid << " was stopped\n";
     }
     void switchOn(JobEntry* job, bool move_to_fg = false)
@@ -355,6 +357,7 @@ private:
     SmallShell();
 public:
     JobsList jobs;
+    pid_t smash_pid;
     Command *CreateCommand(const char* cmd_line);
     SmallShell(SmallShell const&)      = delete; // disable copy ctor
     void operator=(SmallShell const&)  = delete; // disable = operator
