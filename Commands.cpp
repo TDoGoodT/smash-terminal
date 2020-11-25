@@ -145,21 +145,31 @@ void BuiltInCommand::execute()
 void ExternalCommand::execute()
 {
 // TODO: add your implementation
-    int *return_status = NULL;
     pid_t c_pid = fork();
     if(c_pid > 0)
     {
-        int option = type == Foreground ? 0 : WNOHANG;
-        if(!waitpid(c_pid, return_status, option))
+        if(type == Foreground)
         {
-            smash_p->jobs.addJob(this,c_pid);
+            assert(smash_p->jobs.fg_job == nullptr);
+            JobsList::JobEntry* new_job = new JobsList::JobEntry(0, c_pid, Running, this);
+            smash_p->jobs.fg_job = new_job;
+            waitpid(c_pid, NULL, 0);
+//            smash_p->jobs.fg_job = nullptr;
+        }
+        else
+        {
+            if(!waitpid(c_pid, NULL, WNOHANG)) //if the new proc didnt finshed
+                    smash_p->jobs.addJob(this,c_pid);
         }
     }
     else
     {
+        setpgrp();
         char cmd[COMMAND_MAX_ARGS*(2+COMMAND_ARGS_MAX_LENGTH)];
         strcpy(cmd, cmd_line.c_str());
-        char *argv[] ={"bash", "-c", cmd, NULL};
+        char bash[] = "bash";
+        char flag[] = "-c";
+        char * argv[] = {bash, flag, cmd, NULL};
         execv("/bin/bash",argv);
     }
 }
@@ -211,15 +221,25 @@ bool is_number(const std::string& s)
 
 void ForegroundCommand::execute(){
 // TODO: test
+    JobsList::JobEntry* job;
     if(args[1])
-        if(is_number(string(args[1]))) job_id = std::stoi(args[1]);
+    {
+        if(is_number(string(args[1]))) {job_id = std::stoi(args[1]);}
         else
         {
             perror("smash error: fg: invalid arguments");
             return;
         }
-    JobsList::JobEntry* last_stopped = (job_id > 0) ? jobs->getJobById(job_id): jobs->getLastStoppedJob(&job_id);
-    if(!last_stopped)
+    }
+    if((job_id > 0))
+    {
+        job = jobs->getJobById(job_id);
+    }
+    else
+    {
+        job = jobs->running_queue.back() ? jobs->running_queue.back() : jobs->waiting_queue.back();
+    }
+    if(!job)
     {
         string error_s;
         if(!job_id)
@@ -229,11 +249,10 @@ void ForegroundCommand::execute(){
         perror(error_s.c_str());
         return;
     }
-    if(kill(last_stopped->pid,SIGCONT) == 0)
-    {
-        cout << cmd_line.c_str() << " : " << last_stopped->pid << "\n";
-        waitpid(last_stopped->pid,NULL,0);
-    }
+    jobs->switchOn(job, true);
+    cout << cmd_line.c_str() << " : " << job->pid << "\n";
+    jobs->removeJobById(job_id);
+    waitpid(job->pid,NULL,0);
 }
 
 
@@ -273,8 +292,8 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
 void SmallShell::executeCommand(const char *cmd_line) {
     // TODO: Add your implementation here
     // for example:
-    Command* cmd = CreateCommand(cmd_line);
     jobs.removeFinishedJobs();
+    Command* cmd = CreateCommand(cmd_line);
     cmd->execute();
 //    delete cmd;
 

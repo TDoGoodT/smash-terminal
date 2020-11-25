@@ -12,17 +12,16 @@ using namespace std;
 void ctrlZHandler(int sig_num)
 {
 	// TODO: Add your implementation
-    std::cout << "smash: got ctrl-Z in " << getpid();
+    std::cout << "\nsmash: got ctrl-Z in ";
     SmallShell& smash = SmallShell::getInstance();
-    JobsList::JobEntry* last_job = smash.jobs.getLastJob(NULL);
-    kill(last_job->pid,SIGSTOP);
+    if(smash.jobs.fg_job) smash.jobs.switchOff(smash.jobs.fg_job);
 }
 
 void ctrlCHandler(int sig_num)
 {
   // TODO: Add your implementation
     std::cout << "smash: got ctrl-C in " << getpid();
-    kill(getpid(),SIGKILL);
+    //kill(getpid(),sig_num);
 }
 
 void alarmHandler(int sig_num)
