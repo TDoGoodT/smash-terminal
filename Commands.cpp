@@ -8,6 +8,8 @@
 #include <iomanip>
 #include <signal.h>
 #include <string>
+#include <stdlib.h>
+
 
 
 #include "Commands.h"
@@ -141,10 +143,22 @@ void BuiltInCommand::execute()
 // TODO: add your implementation
 }
 
-
+ExternalCommand::ExternalCommand(const char* cmd_line, SmallShell* smash_p):
+        Command(cmd_line),
+        smash_p(smash_p)
+{
+    _parseCommandLine(this->cmd_line.c_str(), args);
+    this->cmd_line = string("bash -c \" ") + (string(cmd_line)) + string(" \"");
+    //cout << this->cmd_line << "\n";
+    //strcpy(args[2], this->cmd_line.c_str());
+}
 void ExternalCommand::execute()
 {
 // TODO: add your implementation
+    if(!args[0] || strcmp(args[0],"") == 0) return;
+    //cout << "1: " << args[0] << " 2: " << args[1] << " 3: " << args[2] << std::endl;
+    //cout << args[0] << std::endl;
+
     pid_t c_pid = fork();
     if(c_pid > 0)
     {
@@ -153,8 +167,26 @@ void ExternalCommand::execute()
             assert(smash_p->jobs.fg_job == nullptr);
             JobsList::JobEntry* new_job = new JobsList::JobEntry(0, c_pid, Running, this);
             smash_p->jobs.fg_job = new_job;
-            while(!waitpid(c_pid, NULL, WNOHANG) && smash_p->jobs.fg_job) {}
-            if(smash_p->jobs.fg_job) smash_p->jobs.removeJob(smash_p->jobs.fg_job);
+            int wstatus = -1;
+            do {
+                int w = waitpid(c_pid, &wstatus,  WNOHANG | WUNTRACED);
+                if (w == -1) {
+                    perror("waitpid");
+                    exit(EXIT_FAILURE);
+                }
+
+                if (WIFEXITED(wstatus)) {
+                    printf("exited, status=%d\n", WEXITSTATUS(wstatus));
+                } else if (WIFSIGNALED(wstatus)) {
+                    printf("pid %d killed by signal %d\n", WTERMSIG(wstatus));
+                } else if (WIFSTOPPED(wstatus)) {
+                    printf("pid %d stopped by signal %d\n", c_pid, WSTOPSIG(wstatus));
+                    break;
+                } else if (WIFCONTINUED(wstatus)) {
+                    printf("continued\n");
+                }
+            } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
+            //smash_p->jobs.fg_job = nullptr;
         }
         else
         {
@@ -165,12 +197,14 @@ void ExternalCommand::execute()
     else
     {
         setpgrp();
-        char cmd[COMMAND_MAX_ARGS*(2+COMMAND_ARGS_MAX_LENGTH)];
+        char cmd[COMMAND_ARGS_MAX_LENGTH];
         strcpy(cmd, cmd_line.c_str());
         char bash[] = "bash";
-        char flag[] = "-c";
-        char * argv[] = {bash, flag, cmd, NULL};
-        execv("/bin/bash",argv);
+        char flags[] = "-c";
+        char * argv[] = {bash, flags, cmd, NULL};
+        //cout << cmd << '\n';
+        EXEC("/bin/bash", argv);
+        assert(0);
     }
 }
 
@@ -251,7 +285,7 @@ void ForegroundCommand::execute(){
     }
     if(*std::find(jobs->waiting_queue.begin(), jobs->waiting_queue.end(), job))
     {
-        jobs->switchOn(job, true);
+        jobs->switchJobOn(job, true);
     }
     else
     {
@@ -260,10 +294,15 @@ void ForegroundCommand::execute(){
     }
     cout << cmd_line.c_str() << " : " << job->pid << "\n";
     //jobs->removeJobById(job_id);
-    waitpid(job->pid,NULL,0);
-    jobs->removeJob(job);
+
+     while(!waitpid(job->pid,NULL, WNOHANG) && jobs->fg_job) {}
+    //jobs->removeJob(job);
 }
 
+void QuitCommand::execute()
+{
+    return;
+}
 
 /**
 * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
@@ -289,6 +328,9 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     }
     else if (cmd_s == "fg") {
         return new ForegroundCommand(cmd_line, &jobs);
+    }
+    else if (cmd_s == "quit") {
+        return new QuitCommand(cmd_line, &jobs);
     }
 
     else {

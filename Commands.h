@@ -51,9 +51,7 @@ class ExternalCommand : public Command {
 private:
      SmallShell* smash_p;
 public:
-    ExternalCommand(const char* cmd_line, SmallShell* smash_p):
-            Command(cmd_line),
-            smash_p(smash_p) {}
+    ExternalCommand(const char* cmd_line, SmallShell* smash_p);
     virtual ~ExternalCommand() {}
     void execute() override;
 };
@@ -121,8 +119,12 @@ public:
 class JobsList;
 class QuitCommand : public BuiltInCommand {
 // TODO: Add your data members
+private:
+    JobsList* jobs;
 public:
-    QuitCommand(const char* cmd_line, JobsList* jobs);
+    QuitCommand(const char* cmd_line, JobsList* jobs):
+    BuiltInCommand(cmd_line),
+    jobs(jobs) {}
     virtual ~QuitCommand() {}
     void execute() override;
 };
@@ -251,7 +253,6 @@ public:
     }
     JobEntry * getLastJob(int* lastJobId = nullptr)
     {
-        if(fg_job) return fg_job;
         if(running_queue.back() != nullptr && lastJobId) *lastJobId = running_queue.back()->job_id;
         return running_queue.back();
     }
@@ -260,13 +261,27 @@ public:
         if(waiting_queue.back() != nullptr && jobId) *jobId = waiting_queue.back()->job_id;
         return waiting_queue.back();
     }
-    JobEntry * getFg(int* lastJobId)
+    JobEntry * getFg(int* lastJobId = nullptr)
     {
         if(lastJobId && fg_job) *lastJobId = fg_job->job_id;
         return fg_job;
     }
+    JobEntry * popFg(int* lastJobId = nullptr)
+    {
+        auto fg = getFg();
+        fg_job = nullptr;
+        return fg;
+    }
 // TODO: Add extra methods or modify exisitng ones as needed
-    void switchOff(JobEntry* job)
+    void insertNewJob(JobEntry* job)
+    {
+            assert(jobs_map[job->job_id] == nullptr);
+            job->job_id = _getValidJobId();
+            jobs_map[job->job_id] = job;
+            auto proc_list = job->execution_state == Waiting ? &waiting_queue : &running_queue;
+            proc_list->push_back(job);
+    }
+    void switchJobOff(JobEntry* job)
     {
         if(!job) return;
         if(fg_job == job) {
@@ -280,10 +295,10 @@ public:
         running_queue.remove(job);
         waiting_queue.push_back(job);
         job->execution_state = Waiting;
-        kill(job->pid, SIGSTOP);
+        kill(job->pid*(-1), SIGSTOP);
         std::cout << "smash: process " << job->pid << " was stopped\n";
     }
-    void switchOn(JobEntry* job, bool move_to_fg = false)
+    void switchJobOn(JobEntry* job, bool move_to_fg = false)
     {
         assert((move_to_fg && fg_job) == 0);
         if(move_to_fg)
@@ -293,7 +308,7 @@ public:
         waiting_queue.remove(job);
         running_queue.push_back(job);
         job->execution_state = Running;
-        kill(job->pid, SIGCONT);
+        kill(job->pid*(-1), SIGCONT);
     }
     JobsList::JobEntry* getJobByPid(int pid)
     {
