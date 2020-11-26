@@ -22,8 +22,11 @@ int main(int argc, char* argv[]) {
             std::string cmd_line;
             std::getline(std::cin, cmd_line);
             smash.executeCommand(cmd_line.c_str());
+<<<<<<< HEAD
             //assert(smash.jobs.getFg() == nullptr);
             //smash.jobs.fg_job = nullptr;
+=======
+>>>>>>> 2d9732756aeaddb70eca80ccdf53af92186557c3
         }
     return 0;
 }

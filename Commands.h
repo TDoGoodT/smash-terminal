@@ -1,7 +1,6 @@
 #ifndef SMASH_COMMAND_H_
 #define SMASH_COMMAND_H_
 
-#include <assert.h>
 #include <sys/wait.h>
 #include <numeric>
 #include <vector>
@@ -77,7 +76,8 @@ public:
 class ChangeDirCommand : public BuiltInCommand {
 // TODO: Add your data members
 public:
-    ChangeDirCommand(const char* cmd_line, char** plastPwd);
+    std::string old;
+    ChangeDirCommand(const char* cmd_line, std::string plastPwd);
     virtual ~ChangeDirCommand() {}
     void execute() override;
 };
@@ -111,7 +111,8 @@ public:
 
 class ShowPidCommand : public BuiltInCommand {
 public:
-    ShowPidCommand(const char* cmd_line);
+    ShowPidCommand(const char* cmd_line):
+    BuiltInCommand(cmd_line){}
     virtual ~ShowPidCommand() {}
     void execute() override;
 };
@@ -145,50 +146,49 @@ public:
             cmd(cmd), start_time(time(nullptr)) {}
 
     };
-
+private:
 // TODO: Add your data members
     list<JobEntry*>     waiting_queue;
-    list<JobEntry*>     running_queue;
+    list<JobEntry*>     runing_queue;
     vector<int>         free_job_ids;
     map<int,JobEntry*>  jobs_map;
-    JobEntry*           fg_job;
-
     int _getValidJobId()
     {
         int ret = free_job_ids.back();
         free_job_ids.pop_back();
         return ret;
     }
-    JobsList(): free_job_ids(MAX_NUM_PROC), jobs_map(), fg_job(nullptr)
+public:
+    JobsList(): free_job_ids(MAX_NUM_PROC), jobs_map()
     {
-        for(int i = MAX_NUM_PROC; i > 0; i--) free_job_ids.push_back(i);
+        std::iota(free_job_ids.begin(),free_job_ids.end(),1);
     }
     ~JobsList() {}
     void addJob(Command* cmd,  pid_t pid, bool isStopped = false)
     {
-        int new_job_id = _getValidJobId();
+        int new_job_id = MAX_NUM_PROC - _getValidJobId();
         ExecState state = isStopped ? Waiting : Running;
         JobEntry* new_job = new JobEntry(new_job_id, pid, state, cmd);
-        if(isStopped) waiting_queue.push_back(new_job);
-        else running_queue.push_back(new_job);
+        waiting_queue.push_back(new_job);
         jobs_map[new_job_id] = new_job;
 
     }
 
     void printJobsList()
     {
-        //removeFinishedJobs();
-        for(auto job_pair : jobs_map)
+        removeFinishedJobs();
+        for(int i = 1; i <= MAX_NUM_PROC; i++)
         {
-            if(!job_pair.second) continue;
-            JobEntry job = *job_pair.second;
-            const char * stopped = (job.execution_state ==  Waiting)  ? "(stopped)" : "";
-            std::cout   << "[" << job.job_id << "] "        \
-                        <<  job.cmd->cmd_line << " : "      \
-                        << job.pid << " "                   \
-                        << time(nullptr) - job.start_time   \
-                        << " secs " << stopped << "\n";
-
+            if(jobs_map[i])
+            {
+                JobEntry job = *jobs_map[i];
+                const char * stopped = (job.execution_state ==  Waiting)  ? "(stopped)" : "";
+                std::cout   << "[" << job.job_id << "] "        \
+                            <<  job.cmd->cmd_line << " : "      \
+                            << job.pid << " "                   \
+                            << time(nullptr) - job.start_time   \
+                            << " secs " << stopped << "\n";
+            }
         }
     }
     void killAllJobs()
@@ -197,12 +197,10 @@ public:
     }
     void removeFinishedJobs()
     {
-        //for(auto job : jobs_map)
-        if(fg_job && waitpid(fg_job->pid, NULL, WNOHANG) > 0) removeJob(fg_job);
-        for(int i = 1; i <= MAX_NUM_PROC; i++)
+        int *return_status = NULL;
+        for(const JobEntry* job : waiting_queue)
         {
-            JobEntry* job = jobs_map[i];
-            if(job && waitpid(job->pid, NULL, WNOHANG) > 0)
+            if(waitpid(job->pid, return_status, WNOHANG) > 0)
             {
                 removeJobById(job->job_id);
             }
@@ -214,20 +212,18 @@ public:
     }
     void removeJobById(int jobId)
     {
-        assert(jobId > 0);
         JobEntry* job = jobs_map[jobId];
         if(job)
         {
-            std::cout << "removing " << jobId << std::endl;
             waiting_queue.remove(job);
-            running_queue.remove(job);
             jobs_map.erase(jobId);
             free_job_ids.push_back(jobId);
             delete job;
         }
     }
-    void removeJob(JobEntry* job)
+    JobEntry * getLastJob(int* lastJobId)
     {
+<<<<<<< HEAD
         if(!job) return;
         else if(fg_job == job)
         {
@@ -262,9 +258,14 @@ public:
         return waiting_queue.back();
     }
     JobEntry * getFg(int* lastJobId = nullptr)
+=======
+        if(waiting_queue.back() != nullptr && lastJobId) *lastJobId = waiting_queue.back()->job_id;
+        return waiting_queue.back();
+    }
+    JobEntry *getLastStoppedJob(int *jobId)
+>>>>>>> 2d9732756aeaddb70eca80ccdf53af92186557c3
     {
-        if(lastJobId && fg_job) *lastJobId = fg_job->job_id;
-        return fg_job;
+        return getLastJob(jobId);
     }
     JobEntry * popFg(int* lastJobId = nullptr)
     {
@@ -273,6 +274,7 @@ public:
         return fg;
     }
 // TODO: Add extra methods or modify exisitng ones as needed
+<<<<<<< HEAD
     void insertNewJob(JobEntry* job)
     {
             assert(jobs_map[job->job_id] == nullptr);
@@ -319,6 +321,8 @@ public:
         return nullptr;
     }
 
+=======
+>>>>>>> 2d9732756aeaddb70eca80ccdf53af92186557c3
 };
 
 
@@ -371,8 +375,8 @@ private:
     string name;
     SmallShell();
 public:
+    static std::string oldp;
     JobsList jobs;
-    pid_t smash_pid;
     Command *CreateCommand(const char* cmd_line);
     SmallShell(SmallShell const&)      = delete; // disable copy ctor
     void operator=(SmallShell const&)  = delete; // disable = operator

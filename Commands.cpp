@@ -1,6 +1,7 @@
 #include <dirent.h>
 #include <algorithm>
 #include <unistd.h>
+#include <string>
 #include <string.h>
 #include <iostream>
 #include <vector>
@@ -15,9 +16,9 @@
 #include "Commands.h"
 
 using namespace std;
-
 const std::string WHITESPACE = " \n\r\t\f\v";
 
+std::string SmallShell::oldp = "";
 #if 0
 #define FUNC_ENTRY()  \
   cerr << __PRETTY_FUNCTION__ << " --> " << endl;
@@ -49,6 +50,20 @@ string _rtrim(const std::string& s)
 string _trim(const std::string& s)
 {
   return _rtrim(_ltrim(s));
+}
+const vector<string> explode(const string& s, const char c)
+{
+    string buff{""};
+    vector<string> v;
+
+    for(auto n:s)
+    {
+        if(n != c) buff+=n; else
+        if(n == c && buff != "") { v.push_back(buff); buff = ""; }
+    }
+    if(buff != "") v.push_back(buff);
+
+    return v;
 }
 
 int _parseCommandLine(const char* cmd_line, char** args) {
@@ -100,7 +115,7 @@ static const string _getCurrDir()
 // TODO: Add your implementation for classes in Commands.h
 
 SmallShell::SmallShell():
-    name("smash"), jobs(), smash_pid(getpid()) {}
+    name("smash"), jobs(){}
 
 SmallShell::~SmallShell() {
 // TODO: add your implementation
@@ -159,10 +174,12 @@ void ExternalCommand::execute()
     //cout << "1: " << args[0] << " 2: " << args[1] << " 3: " << args[2] << std::endl;
     //cout << args[0] << std::endl;
 
+
     pid_t c_pid = fork();
     if(c_pid > 0)
     {
-        if(type == Foreground)
+        int option = type == Foreground ? 0 : WNOHANG;
+        if(!waitpid(c_pid, return_status, option))
         {
             assert(smash_p->jobs.fg_job == nullptr);
             JobsList::JobEntry* new_job = new JobsList::JobEntry(0, c_pid, Running, this);
@@ -241,6 +258,74 @@ void ChangePromptCommand::execute(){
     else smash_p->setName(args[1]); // else -> set shell name to be the 1st argument
 }
 
+void ShowPidCommand::execute(){
+
+    cout << "smash pid is " << getpid() << "\n";
+}
+ChangeDirCommand::ChangeDirCommand(const char *cmd_line, std::string plastPwd):BuiltInCommand(cmd_line),old(plastPwd){}
+void ChangeDirCommand::execute(){
+    std::string oldpath = get_current_dir_name();
+    const vector<string> s=explode(cmd_line,' ');
+    if(args[2]){                                                    // Too many args
+        perror("smash error: cd: too many arguments");
+    }else{                                                          //Less then 2 arguments
+        if(args[1]){                                                //Exacly 2 arguments
+            char p[s[1].length()+1];
+            for (int i = 0; i < sizeof(p); i++) {
+                p[i] = s[1][i];
+            }
+            p[s[1].length()]=0;
+            if(s[1]=="-"){
+                if(old==""){
+                    std::cerr<<"smash error: cd: OLDPWD not set"<<std::endl;
+                }else{
+                    char p[old.length()+1];
+                    for (int i = 0; i < old.length()+1; i++) {
+                        p[i] = old[i];
+                    }
+                    long size = pathconf(".",_PC_PATH_MAX);
+                    char* new_arr;
+                    char* tmp;
+                    if ((new_arr = (char *)malloc((size_t)size)) != NULL) {
+                        tmp = getcwd(new_arr, (size_t) size);
+                        if(!tmp){
+                            perror("smash error: getcwd failed");
+                            return;
+                        }
+                    }
+                    if(chdir(p)!=0){
+                        perror("smash error: chdir failed");
+                        return;
+                    }
+                    SmallShell::oldp=tmp;
+                    free(new_arr);
+                }
+            }else{
+                long size = pathconf(".", _PC_PATH_MAX);
+                char* new_arr;
+                char* tmp;
+                if ((new_arr = (char *)malloc((size_t)size)) != NULL) {
+                    tmp = getcwd(new_arr, (size_t) size);
+                    if(!tmp){
+                        perror("smash error: getcwd failed");
+                        return;
+                    }
+                }
+                if(chdir(p) != 0){
+                    perror("smash error: chdir failed");
+                    return;
+                }
+                SmallShell::oldp = tmp;
+                free(new_arr);
+            }
+        } else {
+            return;
+        }
+    }
+
+
+}
+
 void JobsCommand::execute()
 {
 // TODO: add your implementation
@@ -255,31 +340,21 @@ bool is_number(const std::string& s)
 
 void ForegroundCommand::execute(){
 // TODO: test
-    JobsList::JobEntry* job;
     if(args[1])
-    {
-        if(is_number(string(args[1]))) {job_id = std::stoi(args[1]);}
+        if(is_number(string(args[1]))) job_id = std::stoi(args[1]);
         else
         {
             perror("smash error: fg: invalid arguments");
             return;
         }
-    }
-    if((job_id > 0))
-    {
-        job = jobs->getJobById(job_id);
-    }
-    else
-    {
-        job = jobs->running_queue.back() ? jobs->running_queue.back() : jobs->waiting_queue.back();
-    }
-    if(!job)
+    JobsList::JobEntry* last_stopped = (job_id > 0) ? jobs->getJobById(job_id): jobs->getLastStoppedJob(&job_id);
+    if(!last_stopped)
     {
         string error_s;
         if(!job_id)
             error_s = string("smash error: fg: jobs list is empty");
         else
-            error_s = string("smash error: fg: job-id ") + std::to_string(job_id) + string( " does not exist");
+            error_s = string("smash error: fg: job-id ",job_id) + string( " does not exist");
         perror(error_s.c_str());
         return;
     }
@@ -289,8 +364,8 @@ void ForegroundCommand::execute(){
     }
     else
     {
-        assert(jobs->fg_job == nullptr);
-        jobs->fg_job = job;
+        cout << cmd_line.c_str() << " : " << last_stopped->pid << "\n";
+        waitpid(last_stopped->pid,NULL,0);
     }
     cout << cmd_line.c_str() << " : " << job->pid << "\n";
     //jobs->removeJobById(job_id);
@@ -323,6 +398,12 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     else if (cmd_s == "ls") {
         return new GetDirContentCommand(cmd_line);
     }
+    else if (cmd_s == "showpid") {
+        return new ShowPidCommand(cmd_line);
+    }
+    else if (cmd_s == "cd") {
+        return new ChangeDirCommand(cmd_line, oldp);
+    }
     else if (cmd_s == "jobs") {
         return new JobsCommand(cmd_line, &jobs);
     }
@@ -343,8 +424,8 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
 void SmallShell::executeCommand(const char *cmd_line) {
     // TODO: Add your implementation here
     // for example:
-    jobs.removeFinishedJobs();
     Command* cmd = CreateCommand(cmd_line);
+    jobs.removeFinishedJobs();
     cmd->execute();
 //    delete cmd;
 
