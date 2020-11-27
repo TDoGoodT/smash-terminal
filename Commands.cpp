@@ -160,14 +160,12 @@ BuiltInCommand::BuiltInCommand(const char* cmd_line):
     }
 
 void BuiltInCommand::execute(){
-// TODO: add your implementation
+// TODO: add your implementation 
 }
 
 ExternalCommand::ExternalCommand(const char* cmd_line, SmallShell* smash_p):
         Command(cmd_line),
         smash_p(smash_p){
-    //_parseCommandLine(this->cmd_line.c_str(), args);
-    char new_cmd_line[this->cmd_line.length()+1];
     if(type == Background){
         char new_cmd_line[this->cmd_line.length()+1];
         strcpy(new_cmd_line, cmd_line);
@@ -195,9 +193,11 @@ void ExternalCommand::execute(){
         setpgrp();
         char cmd[COMMAND_ARGS_MAX_LENGTH];
         strcpy(cmd, run_cmd.c_str());
+        char bash[] = "/bin/bash";
+        char flags[] = "-c";
         char* argv[4];
-        argv[0] = "/bin/bash";
-        argv[1] = "-c";
+        argv[0] = bash;
+        argv[1] = flags;
         argv[2] = cmd;
         argv[3] = NULL;
         EXEC(*argv, argv);
