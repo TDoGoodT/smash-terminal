@@ -38,10 +38,8 @@ public:
 };
 
 class BuiltInCommand : public Command {
-    //std::string[COMMAND_MAX_ARGS] args;
 public:
-    BuiltInCommand(const char* cmd_line):
-    Command(cmd_line) {}
+    BuiltInCommand(const char* cmd_line);
     virtual ~BuiltInCommand() {}
     void execute() override;
 };
@@ -122,11 +120,11 @@ class JobsList;
 class QuitCommand : public BuiltInCommand {
 // TODO: Add your data members
 private:
-    JobsList* jobs;
+    SmallShell* smash_p;
 public:
-    QuitCommand(const char* cmd_line, JobsList* jobs):
+    QuitCommand(const char* cmd_line, SmallShell* smash_p):
     BuiltInCommand(cmd_line),
-    jobs(jobs) {}
+    smash_p(smash_p) {}
     virtual ~QuitCommand() {}
     void execute() override;
 };
@@ -153,15 +151,13 @@ public:
     vector<int>         free_job_ids;
     map<int,JobEntry*>  jobs_map;
     JobEntry*           fg_job;
-    int _getValidJobId()
-    {
+    int _getValidJobId(){
         int ret = free_job_ids.back();
         free_job_ids.pop_back();
         return ret;
     }
 public:
-    JobsList(): free_job_ids(), jobs_map()
-    {
+    JobsList(): free_job_ids(), jobs_map(){
         jobs_map[0] = nullptr;
         for(int i = MAX_NUM_PROC; i > 0; i--) {
             free_job_ids.push_back(i);
@@ -169,8 +165,7 @@ public:
         }
     }
     ~JobsList() {}
-    JobEntry* addJob(Command* cmd,  pid_t pid, bool isStopped = false)
-    {
+    JobEntry* addJob(Command* cmd,  pid_t pid, bool isStopped = false){
         int new_job_id = _getValidJobId();
         JobEntry* new_job;
         if(isStopped){
@@ -186,13 +181,10 @@ public:
         return new_job;
     }
 
-    void printJobsList()
-    {
+    void printJobsList(){
         removeFinishedJobs();
-        for(int i = 1; i <= MAX_NUM_PROC; i++)
-        {
-            if(jobs_map[i])
-            {
+        for(int i = 1; i <= MAX_NUM_PROC; i++){
+            if(jobs_map[i]){
                 JobEntry job = *jobs_map[i];
                 const char * stopped = (job.execution_state ==  Waiting)  ? "(stopped)" : "";
                 std::cout   << "[" << job.job_id << "] "        \
@@ -203,56 +195,57 @@ public:
             }
         }
     }
-    void killAllJobs()
-    {
-        for(int i = 1; i <= MAX_NUM_PROC; i++)
-        {
-            //killJobById(i);
+    void killAllJobs(){
+        for(int i = 1; i <= MAX_NUM_PROC; i++){
+            killJobById(i);
             removeJobById(i);
         }
     }
-    void removeFinishedJobs()
-    {
+    void removeFinishedJobs(){
         int wstatus = -1;
-        for(int i = 1; i <= MAX_NUM_PROC; i++)
-        {
+        for(int i = 1; i <= MAX_NUM_PROC; i++){
             JobEntry* job = jobs_map[i];
-            if((job != nullptr) && (waitpid(job->pid, &wstatus , WNOHANG) > 0))
-            {
+            if((job != nullptr) && (waitpid(job->pid, &wstatus , WNOHANG) > 0)){
                 removeJobById(job->job_id);
             }
         }
     }
-    JobEntry * getJobById(int jobId)
-    {
+    JobEntry * getJobById(int jobId){
         return jobs_map[jobId];
     }
-    void removeJobById(int jobId)
-    {
+    void removeJobById(int jobId){
         JobEntry* job;
         if(jobId > 0){
             job = jobs_map[jobId];
-            assert(job != nullptr);
-            if(job->execution_state == Waiting) waiting_queue.remove(job);
-            else running_queue.remove(job);
-            jobs_map.erase(jobId);
-            free_job_ids.push_back(jobId);
-            delete job;
+            if(job){
+                if(job->execution_state == Waiting) waiting_queue.remove(job);
+                else running_queue.remove(job);
+                jobs_map.erase(jobId);
+                free_job_ids.push_back(jobId);
+                delete job;
             }
         }else{
             job = fg_job;
-            if(job->execution_state == Waiting) waiting_queue.remove(job);
-            else running_queue.remove(job);
-            delete job;
+            if(job){
+                if(job->execution_state == Waiting) waiting_queue.remove(job);
+                else running_queue.remove(job);
+                delete job;
+                fg_job = nullptr;
+            }
         }
     }
-    void removeJob(JobEntry* job)
-    {
+    void removeJob(JobEntry* job){
         if(!job) { return; }
         else removeJobById(job->job_id);
     }
-    JobEntry * getLastJob(int* lastJobId = nullptr)
-    {
+    void killJobById(int job_id){
+        JobEntry* job_to_kill = jobs_map[job_id];
+        if(job_to_kill){
+            std::cout << job_to_kill->pid << ": " << job_to_kill->cmd->cmd_line << std::endl;
+            kill(job_to_kill->pid*(-1),SIGKILL);
+        }
+    }
+    JobEntry * getLastJob(int* lastJobId = nullptr){
         for(int i = MAX_NUM_PROC; i > 0; i--)
             if(jobs_map[i] != nullptr){
                 if(lastJobId) *lastJobId = i;
@@ -260,24 +253,26 @@ public:
             }
         return nullptr;
     }
-    JobEntry *getLastStoppedJob(int *jobId = nullptr)
-    {
+    JobEntry *getLastStoppedJob(int *jobId = nullptr){
         if(waiting_queue.back() != nullptr && jobId) *jobId = waiting_queue.back()->job_id;
         return waiting_queue.back();
     }
-    JobEntry * getFg(int* lastJobId = nullptr)
-    {
+    JobEntry * getFg(int* lastJobId = nullptr){
         return fg_job;
     }
-    JobEntry * popFg(int* lastJobId = nullptr)
-    {
+    JobEntry * setFg(JobEntry* job = nullptr){
+        assert(fg_job == nullptr);
+        assert(job->cmd->type == Foreground);
+        fg_job = job;
+        return fg_job;
+    }
+    JobEntry * popFg(int* lastJobId = nullptr){
         auto fg = getFg();
         fg_job = nullptr;
         return fg;
     }
 // TODO: Add extra methods or modify exisitng ones as needed
-    void insertJob(JobEntry* job)
-    {
+    void insertJob(JobEntry* job){
         assert(jobs_map[job->job_id] == nullptr || jobs_map[job->job_id] == job);
         if(job->job_id == 0){
             insertNewJob(job);
@@ -287,21 +282,18 @@ public:
             proc_list->push_back(job);
         }
     }
-    void insertNewJob(JobEntry* job)
-    {
+    void insertNewJob(JobEntry* job){
         assert(jobs_map[job->job_id] == nullptr);
         job->job_id = _getValidJobId();
         jobs_map[job->job_id] = job;
         auto proc_list = job->execution_state == Waiting ? &waiting_queue : &running_queue;
         proc_list->push_back(job);
     }
-    void switchJobOff(JobEntry* job)
-    {
+    void switchJobOff(JobEntry* job){
         if(!job) return;
         if(fg_job == job) {
             fg_job = nullptr;
-            if(job->job_id == 0)
-            {
+            if(job->job_id == 0){
                 job->job_id = _getValidJobId();
                 jobs_map[job->job_id] = job;
             }
@@ -312,11 +304,9 @@ public:
         kill(job->pid*(-1), SIGSTOP);
         std::cout << "smash: process " << job->pid << " was stopped\n";
     }
-    void switchJobOn(JobEntry* job, bool move_to_fg = false)
-    {
+    void switchJobOn(JobEntry* job, bool move_to_fg = false){
         assert((move_to_fg && fg_job) == 0);
-        if(move_to_fg)
-        {
+        if(move_to_fg){
             assert(fg_job == nullptr);
             job->cmd->type = Foreground;
             fg_job = job;
@@ -326,8 +316,7 @@ public:
         job->execution_state = Running;
         kill(job->pid*(-1), SIGCONT);
     }
-    JobsList::JobEntry* getJobByPid(int pid)
-    {
+    JobsList::JobEntry* getJobByPid(int pid){
         for(auto job : jobs_map)
         {
             if(job.second && job.second->pid == pid) return job.second;

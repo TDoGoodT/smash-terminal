@@ -9,8 +9,7 @@
 
 using namespace std;
 
-void ctrlZHandler(int sig_num)
-{
+void ctrlZHandler(int sig_num){
 	// TODO: Add your implementation
     std::cout << "\nsmash: got ctrl-Z in ";
     SmallShell& smash = SmallShell::getInstance();
@@ -24,8 +23,7 @@ void ctrlZHandler(int sig_num)
 
 }
 
-void ctrlCHandler(int sig_num)
-{
+void ctrlCHandler(int sig_num){
     std::cout << "\nsmash: got ctrl-C in ";
     SmallShell& smash = SmallShell::getInstance();
     JobsList::JobEntry* job = smash.jobs.popFg();
@@ -38,8 +36,7 @@ void ctrlCHandler(int sig_num)
     std::cout << "smash: process " << job->pid << " was killed" << std::endl;
 }
 
-void alarmHandler(int sig_num)
-{
+void alarmHandler(int sig_num){
   // TODO: Add your implementation
 }
 
