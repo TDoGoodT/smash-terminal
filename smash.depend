@@ -1,0 +1,44 @@
+# depslib dependency file v1.0
+1606438563 source:/home/student/OS/vscode/hw1/HW1_OS/Commands.cpp
+	<dirent.h>
+	<algorithm>
+	<unistd.h>
+	<string>
+	<string.h>
+	<iostream>
+	<vector>
+	<sstream>
+	<iomanip>
+	<signal.h>
+	<string>
+	<stdlib.h>
+	"Commands.h"
+
+1606440070 /home/student/OS/vscode/hw1/HW1_OS/Commands.h
+	<sys/wait.h>
+	<numeric>
+	<vector>
+	<string>
+	<map>
+	<list>
+	<iostream>
+	<assert.h>
+
+1606439153 source:/home/student/OS/vscode/hw1/HW1_OS/signals.cpp
+	<iostream>
+	<signal.h>
+	<sys/types.h>
+	<unistd.h>
+	"signals.h"
+	"Commands.h"
+
+1606437959 /home/student/OS/vscode/hw1/HW1_OS/signals.h
+
+1606438165 source:/home/student/OS/vscode/hw1/HW1_OS/smash.cpp
+	<iostream>
+	<unistd.h>
+	<sys/wait.h>
+	<signal.h>
+	"Commands.h"
+	"signals.h"
+

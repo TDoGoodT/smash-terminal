@@ -163,64 +163,36 @@ ExternalCommand::ExternalCommand(const char* cmd_line, SmallShell* smash_p):
         smash_p(smash_p)
 {
     _parseCommandLine(this->cmd_line.c_str(), args);
-    this->cmd_line = string("bash -c \" ") + (string(cmd_line)) + string(" \"");
-    //cout << this->cmd_line << "\n";
-    //strcpy(args[2], this->cmd_line.c_str());
+    this->run_cmd = this->cmd_line;
 }
 void ExternalCommand::execute()
 {
 // TODO: add your implementation
     if(!args[0] || strcmp(args[0],"") == 0) return;
-    //cout << "1: " << args[0] << " 2: " << args[1] << " 3: " << args[2] << std::endl;
-    //cout << args[0] << std::endl;
-
-
     pid_t c_pid = fork();
     if(c_pid > 0)
     {
-        int option = type == Foreground ? 0 : WNOHANG;
-        if(!waitpid(c_pid, return_status, option))
-        {
-            assert(smash_p->jobs.fg_job == nullptr);
-            JobsList::JobEntry* new_job = new JobsList::JobEntry(0, c_pid, Running, this);
+        assert(smash_p->jobs.fg_job == nullptr);
+        JobsList::JobEntry* new_job;
+        if(type == Foreground){
+            new_job = new JobsList::JobEntry(0, c_pid, Running, this);
             smash_p->jobs.fg_job = new_job;
-            int wstatus = -1;
-            do {
-                int w = waitpid(c_pid, &wstatus,  WNOHANG | WUNTRACED);
-                if (w == -1) {
-                    perror("waitpid");
-                    exit(EXIT_FAILURE);
-                }
-
-                if (WIFEXITED(wstatus)) {
-                    printf("exited, status=%d\n", WEXITSTATUS(wstatus));
-                } else if (WIFSIGNALED(wstatus)) {
-                    printf("pid %d killed by signal %d\n", WTERMSIG(wstatus));
-                } else if (WIFSTOPPED(wstatus)) {
-                    printf("pid %d stopped by signal %d\n", c_pid, WSTOPSIG(wstatus));
-                    break;
-                } else if (WIFCONTINUED(wstatus)) {
-                    printf("continued\n");
-                }
-            } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
-            //smash_p->jobs.fg_job = nullptr;
-        }
-        else
-        {
-            if(!waitpid(c_pid, NULL, WNOHANG)) //if the new proc didnt finshed
-                    smash_p->jobs.addJob(this,c_pid);
+            smash_p->jobs.waitForJob(new_job);
+        }else{
+            smash_p->jobs.addJob(this, c_pid);
         }
     }
     else
     {
         setpgrp();
         char cmd[COMMAND_ARGS_MAX_LENGTH];
-        strcpy(cmd, cmd_line.c_str());
-        char bash[] = "bash";
-        char flags[] = "-c";
-        char * argv[] = {bash, flags, cmd, NULL};
-        //cout << cmd << '\n';
-        EXEC("/bin/bash", argv);
+        strcpy(cmd, run_cmd.c_str());
+        char* argv[4];
+        argv[0] = "/bin/bash";
+        argv[1] = "-c";
+        argv[2] = cmd;
+        argv[3] = NULL;
+        EXEC(*argv, argv);
         assert(0);
     }
 }
@@ -271,7 +243,7 @@ void ChangeDirCommand::execute(){
     }else{                                                          //Less then 2 arguments
         if(args[1]){                                                //Exacly 2 arguments
             char p[s[1].length()+1];
-            for (int i = 0; i < sizeof(p); i++) {
+            for (unsigned int i = 0; i < sizeof(p); i++) {
                 p[i] = s[1][i];
             }
             p[s[1].length()]=0;
@@ -280,7 +252,7 @@ void ChangeDirCommand::execute(){
                     std::cerr<<"smash error: cd: OLDPWD not set"<<std::endl;
                 }else{
                     char p[old.length()+1];
-                    for (int i = 0; i < old.length()+1; i++) {
+                    for (unsigned int i = 0; i < old.length()+1; i++) {
                         p[i] = old[i];
                     }
                     long size = pathconf(".",_PC_PATH_MAX);
@@ -338,17 +310,22 @@ bool is_number(const std::string& s)
         s.end(), [](unsigned char c) { return !std::isdigit(c); }) == s.end();
 }
 
+
+
 void ForegroundCommand::execute(){
 // TODO: test
+    jobs->removeFinishedJobs();
     if(args[1])
+    {
         if(is_number(string(args[1]))) job_id = std::stoi(args[1]);
         else
         {
             perror("smash error: fg: invalid arguments");
             return;
         }
-    JobsList::JobEntry* last_stopped = (job_id > 0) ? jobs->getJobById(job_id): jobs->getLastStoppedJob(&job_id);
-    if(!last_stopped)
+    }
+    JobsList::JobEntry* job = (job_id > 0) ? jobs->getJobById(job_id): jobs->getLastJob(&job_id);
+    if(!job)
     {
         string error_s;
         if(!job_id)
@@ -358,20 +335,17 @@ void ForegroundCommand::execute(){
         perror(error_s.c_str());
         return;
     }
-    if(*std::find(jobs->waiting_queue.begin(), jobs->waiting_queue.end(), job))
+    cout << cmd_line.c_str() << " : " << job->pid << "\n";
+    if(job->execution_state == Waiting)
     {
         jobs->switchJobOn(job, true);
+    }else{
+        job->cmd->type = Foreground;
     }
-    else
-    {
-        cout << cmd_line.c_str() << " : " << last_stopped->pid << "\n";
-        waitpid(last_stopped->pid,NULL,0);
-    }
-    cout << cmd_line.c_str() << " : " << job->pid << "\n";
-    //jobs->removeJobById(job_id);
+    jobs->waitForJob(job);
 
-     while(!waitpid(job->pid,NULL, WNOHANG) && jobs->fg_job) {}
-    //jobs->removeJob(job);
+
+    //cout << cmd_line.c_str() << " : " << job->pid << "\n";
 }
 
 void QuitCommand::execute()
@@ -425,7 +399,7 @@ void SmallShell::executeCommand(const char *cmd_line) {
     // TODO: Add your implementation here
     // for example:
     Command* cmd = CreateCommand(cmd_line);
-    jobs.removeFinishedJobs();
+    //jobs.removeFinishedJobs();
     cmd->execute();
 //    delete cmd;
 
