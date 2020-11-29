@@ -163,7 +163,7 @@ bool _isNumber(const string& s){
 // TODO: Add your implementation for classes in Commands.h
 
 SmallShell::SmallShell():
-    name("smash"), jobs(){}
+    name("smash"), jobs(), pid(getpid()){}
 
 SmallShell::~SmallShell() {
 // TODO: add your implementation
@@ -183,8 +183,8 @@ void SmallShell::addJob(Command* cmd,  pid_t pid, bool isStopped)
 {
     this->jobs.addJob(cmd,pid);
 }*/
-BuiltInCommand::BuiltInCommand(const char* cmd_line):
-    Command(cmd_line) {
+BuiltInCommand::BuiltInCommand(const char* cmd_line, string orig_cmd):
+    Command(cmd_line, orig_cmd) {
     assert(_isBackgroundCommand(cmd_line) == false);//_removeBackgroundSign(new_cmd_line);
     type = Foreground;
     _parseCommandLine(cmd_line,args);
@@ -193,8 +193,8 @@ BuiltInCommand::BuiltInCommand(const char* cmd_line):
 void BuiltInCommand::execute(){
 // TODO: add your implementation
 }
-ExternalCommand::ExternalCommand(const char* cmd_line, SmallShell* smash_p):
-        Command(cmd_line),
+ExternalCommand::ExternalCommand(const char* cmd_line, SmallShell* smash_p, string orig_cmd):
+        Command(cmd_line, orig_cmd),
         smash_p(smash_p){
     if(_isBackgroundCommand(cmd_line)){
         type = Background;
@@ -212,20 +212,36 @@ ExternalCommand::ExternalCommand(const char* cmd_line, SmallShell* smash_p):
 void ExternalCommand::execute(){
 // TODO: add your implementation
     if(!args[0] || strcmp(args[0],"") == 0) return;
-    pid_t c_pid = fork();
-    if(c_pid > 0){
-        assert(smash_p->jobs.fg_job == nullptr);
-        JobsList::JobEntry* new_job;
-        if(type == Foreground){
-            new_job = new JobsList::JobEntry(0, c_pid, Running, this);
-            smash_p->jobs.fg_job = new_job;
-            smash_p->jobs.waitForJob(new_job);
-        }else{
-            smash_p->jobs.addJob(this, c_pid);
+    if(smash_p->pid == getpid()){
+        pid_t c_pid = fork();
+        if(c_pid > 0){
+            //assert(smash_p->jobs.fg_job == nullptr);
+            if(smash_p->pid){
+                JobsList::JobEntry* new_job;
+                if(type == Foreground){
+                    new_job = new JobsList::JobEntry(0, c_pid, Running, this);
+                    smash_p->jobs.fg_job = new_job;
+                    smash_p->jobs.waitForJob(new_job);
+                }else{
+                    smash_p->jobs.addJob(this, c_pid);
+                }
+            }
         }
-    }
-    else{
-        setpgrp();
+        else{
+            setpgrp();
+            char cmd[COMMAND_ARGS_MAX_LENGTH];
+            strcpy(cmd, run_cmd.c_str());
+            char bash[] = "/bin/bash";
+            char flags[] = "-c";
+            char* argv[4];
+            argv[0] = bash;
+            argv[1] = flags;
+            argv[2] = cmd;
+            argv[3] = NULL;
+            EXEC(*argv, argv);
+            assert(0);
+        }
+    }else{
         char cmd[COMMAND_ARGS_MAX_LENGTH];
         strcpy(cmd, run_cmd.c_str());
         char bash[] = "/bin/bash";
@@ -239,49 +255,67 @@ void ExternalCommand::execute(){
         assert(0);
     }
 }
-RedirectionCommand::RedirectionCommand(const char* cmd_line, SmallShell* smash_p):
-    Command(cmd_line), append(false), fd(-1), smash_p(smash_p){
-        bool is_bg = false;
+RedirectionCommand::RedirectionCommand(const char* cmd_line, SmallShell* smash_p, string orig_cmd):
+    Command(cmd_line, orig_cmd), append(false), fd(-1), smash_p(smash_p){
         char cmd_line_cpy[strlen(cmd_line)];
+        type = Foreground;
         strcpy(cmd_line_cpy, cmd_line);
+
         _removeFirstOfSign(cmd_line_cpy, ">");
         if(_isRedirectonCommand(cmd_line_cpy)){
             append = true;
             _removeFirstOfSign(cmd_line_cpy, ">");
         }
+        
         if(_isBackgroundCommand(cmd_line_cpy)){
+            type = Background;
             _removeBackgroundSign(cmd_line_cpy);
-            is_bg = true;
         }
+
         int argn = _parseCommandLine(cmd_line_cpy, args);
-        out_file_path = args[argn-1];
-        string  new_cmd = _rtrim(string(cmd_line_cpy));
-        cout << cmd_line_cpy << endl;
-        cmd = smash_p->CreateCommand(new_cmd.c_str());
-        if(cmd != nullptr) 
-            cmd->type = is_bg ? Background : Foreground;
+        out_file_path = string(args[argn-1]);
+
+        string  new_cmd(cmd_line_cpy);
+        std::size_t pos = new_cmd.find(out_file_path);
+        assert(pos != string::npos);
+        new_cmd = new_cmd.substr(0, pos);
+        if(type == Background) new_cmd += "&";
+        cmd = smash_p->CreateCommand(new_cmd.c_str(), string(orig_cmd));
     }
 void RedirectionCommand::execute(){
     pid_t c_pid = fork();
-    if(c_pid == 0){
-        if(cmd == nullptr) exit(0);
+    if(c_pid > 0){ //father
+        //assert(smash_p->jobs.fg_job == nullptr);
+        JobsList::JobEntry* new_job;
+        if(type == Foreground){
+            JobsList::JobEntry * new_job = new JobsList::JobEntry(0, c_pid, Running, this);
+            smash_p->jobs.fg_job = new_job;
+            cout << "Waiting" <<endl;
+            smash_p->jobs.waitForJob(new_job);
+            cout << "Done" <<endl;
+        }else{
+            smash_p->jobs.addJob(this, c_pid);
+        }
+    }
+    else{
+        //child
         setpgrp();
         prepare();
         cmd->execute();
         cleanup();
         exit(0);
-    }else waitpid(c_pid, nullptr, 0);
+    }
 }
 void RedirectionCommand::prepare() {
     int flags = append ? (O_CREAT | O_WRONLY | O_APPEND) :
                             (O_CREAT | O_WRONLY | O_TRUNC);
     close(1);
-    fd = open(out_file_path, flags, 0666);
+    fd = open(out_file_path.c_str(), flags, 0666);
 }
 void RedirectionCommand::cleanup() {
     if(fd > 0) close(fd);
 }
-PipeCommand::PipeCommand(const char* cmd_line):Command(cmd_line){}
+PipeCommand::PipeCommand(const char* cmd_line, string orig_cmd):Command(cmd_line, orig_cmd){}
 void PipeCommand::execute(){}
 
 void GetCurrDirCommand::execute(){
@@ -315,7 +349,8 @@ void ShowPidCommand::execute(){
     cout << "smash pid is " << getpid() << endl;
 }
 
-ChangeDirCommand::ChangeDirCommand(const char *cmd_line, string plastPwd):BuiltInCommand(cmd_line),old(plastPwd){}
+ChangeDirCommand::ChangeDirCommand(const char *cmd_line, string plastPwd, string orig_cmd):
+BuiltInCommand(cmd_line, orig_cmd),old(plastPwd){}
 void ChangeDirCommand::execute(){
     string oldpath = get_current_dir_name();
     const vector<string> s=explode(cmd_line,' ');
@@ -426,45 +461,45 @@ void QuitCommand::execute(){
 /**
 * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
 */
-Command * SmallShell::CreateCommand(const char* cmd_line) {
+Command * SmallShell::CreateCommand(const char* cmd_line, string orig_cmd = "") {
 //Parse arguments
     char* args[COMMAND_MAX_ARGS];
     if(!_parseCommandLine(cmd_line, args)) return nullptr;
     string cmd_s(args[0]);
     if(_isBackgroundCommand(args[0])) _removeBackgroundSign(args[0]);
     if(_isPipeCommand(cmd_line)){
-        return new PipeCommand(cmd_line);
+        return new PipeCommand(cmd_line, orig_cmd);
     }
     else if(_isRedirectonCommand(cmd_line)){
-        return new RedirectionCommand(cmd_line, this);
+        return new RedirectionCommand(cmd_line, this, orig_cmd);
     }
     else if ((string("pwd").find(cmd_s) && (args[0][3] == ' ')) || (cmd_s == "pwd")){
-        return new GetCurrDirCommand(cmd_line); //Need to change the output
+        return new GetCurrDirCommand(cmd_line, orig_cmd); //Need to change the output
     }
     else if ((string("chprompt").find(cmd_s) && (args[0][8] == ' ')) || (cmd_s == "chprompt")){
-        return new ChangePromptCommand(cmd_line, this); //Need to change the input
+        return new ChangePromptCommand(cmd_line, this, orig_cmd); //Need to change the input
     }
        else if ((string("ls").find(cmd_s) && (args[0][2] == ' ')) || (cmd_s == "ls")){
-        return new GetDirContentCommand(cmd_line); //Need to change the output
+        return new GetDirContentCommand(cmd_line, orig_cmd); //Need to change the output
     }
     else if ((string("showpid").find(cmd_s) && (args[0][7] == ' ')) || (cmd_s == "showpid")) {
-        return new ShowPidCommand(cmd_line); //Need to change the output
+        return new ShowPidCommand(cmd_line, orig_cmd); //Need to change the output
     }
     else if ((string("cd").find(cmd_s) && (args[0][2] == ' ')) || (cmd_s == "cd")) {
-        return new ChangeDirCommand(cmd_line, oldp); //Need to change the input
+        return new ChangeDirCommand(cmd_line, oldp, orig_cmd); //Need to change the input
     }
     else if ((string("jobs").find(cmd_s) && (args[0][4] == ' ')) || (cmd_s == "jobs")){
-        return new JobsCommand(cmd_line, &jobs); //Need to change the input + output
+        return new JobsCommand(cmd_line, &jobs, orig_cmd); //Need to change the input + output
     }
     else if ((string("fg").find(cmd_s) && (args[0][2] == ' ')) || (cmd_s == "fg")){
-        return new ForegroundCommand(cmd_line, &jobs); //Need to change the input
+        return new ForegroundCommand(cmd_line, &jobs, orig_cmd); //Need to change the input
     }
     else if ((string("quit").find(cmd_s) && (args[0][4] == ' ')) || (cmd_s == "quit")){
-        return new QuitCommand(cmd_line, this); //Need to change the input
+        return new QuitCommand(cmd_line, this, orig_cmd); //Need to change the input
     }
     else {
         //cout << "INFO: Executing with bash." << endl;
-    return new ExternalCommand(cmd_line, this); //Need to change the input + output
+    return new ExternalCommand(cmd_line, this, orig_cmd); //Need to change the input + output
     }
 }
 
