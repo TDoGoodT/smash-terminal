@@ -27,31 +27,3 @@ int main(int argc, char* argv[]) {
         }
     return 0;
 }
-/*
-int main(){
-    int fd[2];
-    pipe(fd);
-    if (fork() == 0) {
-    // first child
-        dup2(fd[1],1);
-        close(fd[0]);
-        close(fd[1]);
-        char* args[2];
-        args[0] = "/bin/ls";
-        args[1] = NULL;
-        execv(args[0],args );
-    }
-    if (fork() == 0) {
-    // second child
-        dup2(fd[0],0);
-        close(fd[0]);
-        close(fd[1]);
-        char* args[2];
-        args[0] = "/bin/more";
-        args[1] = NULL;
-        execv(args[0],args );
-    }
-    close(fd[0]);
-    close(fd[1]);
-}
-*/

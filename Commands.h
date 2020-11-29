@@ -63,8 +63,12 @@ public:
 
 class PipeCommand : public Command {
 // TODO: Add your data members
+    bool errPipe;
+    SmallShell* smash_p;
+    Command* cmd1;
+    Command* cmd2;
 public:
-    PipeCommand(const char* cmd_line, string orig_cmd);
+    PipeCommand(const char* cmd_line,SmallShell* smash_p, string orig_cmd);
     virtual ~PipeCommand() {}
     void execute() override;
 };
@@ -344,7 +348,6 @@ public:
         int w = waitpid(job->pid, &wstatus,  WUNTRACED);
         if (w == -1) {
             perror("waitpid");
-            exit(EXIT_FAILURE);
         }
         if (WIFEXITED(wstatus) || WIFSIGNALED(wstatus)) removeJob(job);
         else if (WIFSTOPPED(wstatus)){

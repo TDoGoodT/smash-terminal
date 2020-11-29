@@ -98,6 +98,10 @@ bool _isPipeCommand(const char* cmd_line) {
     return (str.find_first_of("|") != string::npos);
 }
 
+bool _isPipeErrCommand(const char* cmd_line) {
+    const string str(cmd_line);
+    return (str[str.find_first_of("|")+1] == '&');
+}
 
 void _removeBackgroundSign(char* cmd_line) {
   const string str(cmd_line);
@@ -263,7 +267,7 @@ RedirectionCommand::RedirectionCommand(const char* cmd_line, SmallShell* smash_p
 
         if(_isBackgroundCommand(cmd_line_cpy)){
             type = Background;
-            _removeBackgroundSign(cmd_line_cpy);
+            _removeFirstOfSign(cmd_line_cpy, "&");
         }
 
         int argn = _parseCommandLine(cmd_line_cpy, args);
@@ -278,7 +282,7 @@ RedirectionCommand::RedirectionCommand(const char* cmd_line, SmallShell* smash_p
     }
 void RedirectionCommand::execute(){
     pid_t c_pid = fork();
-    if(c_pid > 0){ //father
+    if(c_pid > 0){ //father = smash
         //assert(smash_p->jobs.fg_job == nullptr);
         if(type == Foreground){
             JobsList::JobEntry * new_job = new JobsList::JobEntry(0, c_pid, Running, this);
@@ -306,11 +310,68 @@ void RedirectionCommand::prepare() {
 void RedirectionCommand::cleanup() {
     if(fd > 0) close(fd);
 }
-PipeCommand::PipeCommand(const char* cmd_line, string orig_cmd):
-    Command(cmd_line, orig_cmd){
+PipeCommand::PipeCommand(const char* cmd_line, SmallShell* smash_p, string orig_cmd):
+    Command(cmd_line, orig_cmd), errPipe(false), smash_p(smash_p){
+        char cmd_line_cpy[strlen(cmd_line)];
+        type = Foreground;
+        strcpy(cmd_line_cpy, cmd_line);
 
+        if(_isPipeErrCommand(cmd_line_cpy)){
+            _removeFirstOfSign(cmd_line_cpy, "&");
+            errPipe = true;
+        }
+        
+        if(_isBackgroundCommand(cmd_line_cpy)){
+            _removeFirstOfSign(cmd_line_cpy, "&");
+            type = Background;
+        }
+
+        string str(cmd_line_cpy);
+        size_t idx = str.find("|");
+        string cmd_line1(str.substr(0,idx));
+        cmd1 = smash_p->CreateCommand(cmd_line1.c_str(), this->orig_cmd_line);
+        string cmd_line2(str.substr(idx+1));
+        cmd2 = smash_p->CreateCommand(cmd_line2.c_str(), this->orig_cmd_line);
     }
-void PipeCommand::execute(){}
+void PipeCommand::execute(){
+    pid_t c_pid;
+    c_pid = fork();
+    if(c_pid > 0){ //father = smash
+        if(type == Foreground){
+            JobsList::JobEntry * new_job = new JobsList::JobEntry(0, c_pid, Running, this);
+            smash_p->jobs.fg_job = new_job;
+            smash_p->jobs.waitForJob(new_job);
+        }else{
+            smash_p->jobs.addJob(this, c_pid);
+        }
+    }
+    else{ //child = pipe command
+        setpgrp();
+        int fd[2];
+        pipe(fd); // first child out --> second child in
+        pid_t c_pid1 = fork();
+        if (c_pid1 == 0) {// first child 
+            dup2(fd[1],1);
+            close(fd[0]);
+            close(fd[1]);
+            cmd1->execute();
+            exit(0);
+        }
+        pid_t c_pid2 = fork();
+        if (c_pid2 == 0) {// second child
+            dup2(fd[0],0);
+            close(fd[0]);
+            close(fd[1]);
+            cmd2->execute();
+            exit(0);
+        }
+        close(fd[0]);
+        close(fd[1]);
+        waitpid(c_pid1, nullptr, 0);
+        waitpid(c_pid2, nullptr, 0);        
+        exit(0);
+    }
+}
 
 void GetCurrDirCommand::execute(){
 // TODO: test
@@ -558,7 +619,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line, string orig_cmd) {
     string cmd_s(args[0]);
     if(_isBackgroundCommand(args[0])) _removeBackgroundSign(args[0]);
     if(_isPipeCommand(cmd_line)){
-        return new PipeCommand(cmd_line, orig_cmd);
+        return new PipeCommand(cmd_line, this, orig_cmd);
     }
     else if(_isRedirectonCommand(cmd_line)){
         return new RedirectionCommand(cmd_line, this, orig_cmd);
@@ -600,14 +661,9 @@ Command * SmallShell::CreateCommand(const char* cmd_line, string orig_cmd) {
 
 void SmallShell::executeCommand(const char *cmd_line) {
     // TODO: Add your implementation here
-    // for example:
-
-
     Command* cmd = CreateCommand(cmd_line, "");
-    //jobs.removeFinishedJobs();
+    jobs.removeFinishedJobs();
     if(cmd) cmd->execute();
-//    delete cmd;
-
-    // Please note that you must fork smash process for some commands (e.g., external commands....)
+    //delete cmd;
 }
 
