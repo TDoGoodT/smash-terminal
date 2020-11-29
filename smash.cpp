@@ -16,14 +16,17 @@ int main(int argc, char* argv[]) {
     //TODO: setup sig alarm handler
 
     SmallShell& smash = SmallShell::getInstance();
-    //std::cout << "smash is running with pid " << getpid() << std::endl;
-    while(true){
+    while(true)
+        {
             std::cout << smash.getName() + ">";
             std::string cmd_line;
             std::getline(std::cin, cmd_line);
             smash.executeCommand(cmd_line.c_str());
+<<<<<<< Updated upstream
             smash.jobs.removeFinishedJobs();
             //assert(smash.jobs.getFg() == nullptr);
+=======
+>>>>>>> Stashed changes
         }
     return 0;
 }

@@ -9,11 +9,14 @@
 #include <iomanip>
 #include <signal.h>
 #include <string>
+<<<<<<< Updated upstream
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 
+=======
+>>>>>>> Stashed changes
 
 
 #include "Commands.h"
@@ -156,10 +159,13 @@ static const string _getCurrDir()
     return string(get_current_dir_name());
 }
 
+<<<<<<< Updated upstream
 bool _isNumber(const string& s){
     return !s.empty() && find_if(s.begin(),
         s.end(), [](unsigned char c) { return !isdigit(c); }) == s.end();
 }
+=======
+>>>>>>> Stashed changes
 // TODO: Add your implementation for classes in Commands.h
 
 SmallShell::SmallShell():
@@ -189,6 +195,7 @@ BuiltInCommand::BuiltInCommand(const char* cmd_line, string orig_cmd):
     type = Foreground;
     _parseCommandLine(cmd_line,args);
     this->cmd_line = string(cmd_line);
+<<<<<<< Updated upstream
 }
 void BuiltInCommand::execute(){
 // TODO: add your implementation
@@ -208,9 +215,32 @@ ExternalCommand::ExternalCommand(const char* cmd_line, SmallShell* smash_p, stri
         run_cmd = this->cmd_line;
     }
     _parseCommandLine(run_cmd.c_str(),args);
+=======
+    char new_cmd_line[this->cmd_line.length()+1];
+
+    strcpy(new_cmd_line, cmd_line);
+    if(_isBackgroundCommand(cmd_line))
+    {
+        _removeBackgroundSign(new_cmd_line);
+        type = Background;
+    } else type = Foreground;
+    this->cmd_line = string(new_cmd_line);
+    _parseCommandLine(new_cmd_line, args);
 }
-void ExternalCommand::execute(){
+
+
+
+void BuiltInCommand::execute()
+{
 // TODO: add your implementation
+>>>>>>> Stashed changes
+}
+
+
+void ExternalCommand::execute()
+{
+// TODO: add your implementation
+<<<<<<< Updated upstream
     if(!args[0] || strcmp(args[0],"") == 0) return;
     if(smash_p->pid == getpid()){
         pid_t c_pid = fork();
@@ -253,6 +283,24 @@ void ExternalCommand::execute(){
         argv[3] = NULL;
         EXEC(*argv, argv);
         assert(0);
+=======
+    int *return_status = NULL;
+    pid_t c_pid = fork();
+    if(c_pid > 0)
+    {
+        int option = type == Foreground ? 0 : WNOHANG;
+        if(!waitpid(c_pid, return_status, option))
+        {
+            smash_p->jobs.addJob(this,c_pid);
+        }
+    }
+    else
+    {
+        char cmd[COMMAND_MAX_ARGS*(2+COMMAND_ARGS_MAX_LENGTH)];
+        strcpy(cmd, cmd_line.c_str());
+        char *argv[] ={"bash", "-c", cmd, NULL};
+        execv("/bin/bash",argv);
+>>>>>>> Stashed changes
     }
 }
 RedirectionCommand::RedirectionCommand(const char* cmd_line, SmallShell* smash_p, string orig_cmd):
@@ -323,18 +371,35 @@ void GetCurrDirCommand::execute(){
     cout << _getCurrDir() << endl;
 }
 
+<<<<<<< Updated upstream
 void GetDirContentCommand::execute(){
+=======
+
+
+void GetDirContentCommand::execute()
+{
+>>>>>>> Stashed changes
 // TODO: add your implementation
     struct dirent **namelist;
     int n = scandir(".", &namelist, 0, alphasort);
     if (n < 0) perror("smash error: scandir failed");
+<<<<<<< Updated upstream
     else{
         for (int i = 0; i < n; i++){
             cout << namelist[i]->d_name << endl;
+=======
+    else
+    {
+        for (int i = 0; i < n; i++)
+        {
+            cout << namelist[i]->d_name << "\n";
+>>>>>>> Stashed changes
             free(namelist[i]);
         }
     }
     free(namelist);
+
+
 }
 
 
@@ -359,7 +424,7 @@ void ChangeDirCommand::execute(){
     }else{                                                          //Less then 2 arguments
         if(args[1]){                                                //Exacly 2 arguments
             char p[s[1].length()+1];
-            for (unsigned int i = 0; i < sizeof(p); i++) {
+            for (int i = 0; i < sizeof(p); i++) {
                 p[i] = s[1][i];
             }
             p[s[1].length()]=0;
@@ -368,7 +433,7 @@ void ChangeDirCommand::execute(){
                     cerr<<"smash error: cd: OLDPWD not set"<<endl;
                 }else{
                     char p[old.length()+1];
-                    for (unsigned int i = 0; i < old.length()+1; i++) {
+                    for (int i = 0; i < old.length()+1; i++) {
                         p[i] = old[i];
                     }
                     long size = pathconf(".",_PC_PATH_MAX);
@@ -414,23 +479,134 @@ void ChangeDirCommand::execute(){
 
 }
 
-void JobsCommand::execute(){
+KillCommand::KillCommand(const char* cmd_line,JobsList *jobs):BuiltInCommand(cmd_line),jobs(jobs){}
+void KillCommand::execute(){
+    const vector<string> s = explode(cmd_line,' ');
+    if(s.size() != 3){
+        perror("smash error: kill: invalid arguments");
+        }
+    else{
+        int sig;
+        int id;
+        if(stringstream(s[1])<<sig && stringstream(s[2])<<id){
+            sig = sig * (-1);
+            pid_t p;
+            if(jobs->getJobById(id)!=nullptr){
+                p = jobs->getJobById(id)->pid;
+                if(kill(p*(-1),sig) == -1){
+                    perror("smash error: kill failed");
+                }else{
+                    cout << "signal number " << sig << " was sent to pid " << p << endl;
+                }
+                jobs->removeFinishedJobs();
+            }else{
+                string s = "smash error: kill: job-id ";
+                std::cerr << s;
+                std::cerr << id;
+                perror(" does not exist");
+                std::cerr << endl;
+            }
+            return;
+        }else{
+            perror("smash error: kill: invalid argumetns");
+            std::cerr << endl;
+            return;
+        }
+    }
+}
+
+BackgroundCommand::BackgroundCommand(const char* cmd_line, JobsList* jobs):BuiltInCommand(cmd_line),jobs(jobs){}
+void BackgroundCommand::execute(){
+    jobs->removeFinishedJobs();
+    const vector<string> s = explode(cmd_line,' ');
+    if(s.size()>2){ //Too much parameters
+        perror("smash error: bg: invalid arguments");
+        return;
+    }else{ //Less then two parameters
+        if(s.size()==2){ //exacly two parameters
+            int id;
+            if(stringstream(s[1])<<id){
+                JobsList::JobEntry *job = jobs->getJobById(id);
+                if(job){
+                    if(job->execution_state==Running){
+                        perror("smash error: bg: job-id ");
+                        std:cerr << id;
+                        perror(" is already running int the background");
+                        return;
+                    }
+                    std::cout << job->cmd << " : " << job->pid << std::endl;
+                    job->execution_state = Running;
+                    if(kill(job->pid*(-1),SIGCONT) < 0){
+                        perror("smash error: kill faiked");
+                        return;
+                    }
+
+                }else{
+                   std::cerr << "smash error: bg: job-id " << id << " does not exist" << std::endl;
+                   return;
+                }
+            }else{
+                perror("smash error: bg: invalid arguments");
+                return;
+            }
+        }else{
+            if(s.size()==1){ // No Parameter
+                int id;
+                JobsList::JobEntry *job = jobs->getLastJob(&id);
+                if(job){
+                    string s = job->cmd->cmd_line;
+                    std::cout << job->cmd << " : " << job->pid << std::endl;
+                    job->execution_state = Running;
+                    if(kill(job->pid*(-1),SIGCONT) < 0){
+                        perror("smash error: kill faiked");
+                        return;
+                    }
+                }else{
+                    perror("smash error: bg: there is no stopped jobs to resume");
+                    return;
+                }
+            }else{
+                perror("smash error: bg: invalid arguments");
+                return;
+            }
+        }
+    }
+    jobs->removeFinishedJobs();
+
+}
+
+
+void JobsCommand::execute()
+{
 // TODO: add your implementation
     jobs->printJobsList();
 }
 
+bool is_number(const std::string& s)
+{
+    return !s.empty() && std::find_if(s.begin(),
+        s.end(), [](unsigned char c) { return !std::isdigit(c); }) == s.end();
+}
+
 void ForegroundCommand::execute(){
 // TODO: test
+<<<<<<< Updated upstream
     jobs->removeFinishedJobs();
     if(args[1]){
         if(_isNumber(string(args[1]))) job_id = stoi(args[1]);
         else{
+=======
+    if(args[1])
+        if(is_number(string(args[1]))) job_id = std::stoi(args[1]);
+        else
+        {
+>>>>>>> Stashed changes
             perror("smash error: fg: invalid arguments");
             return;
         }
-    }
-    JobsList::JobEntry* job = (job_id > 0) ? jobs->getJobById(job_id): jobs->getLastJob(&job_id);
-    if(!job){
+    JobsList::JobEntry* last_stopped = (job_id > 0) ? jobs->getJobById(job_id): jobs->getLastStoppedJob(&job_id);
+    if(!last_stopped)
+    {
         string error_s;
         if(!job_id)
             error_s = string("smash error: fg: jobs list is empty");
@@ -439,16 +615,23 @@ void ForegroundCommand::execute(){
         perror(error_s.c_str());
         return;
     }
+<<<<<<< Updated upstream
     cout << cmd_line.c_str() << " : " << job->pid << endl;
     if(job->execution_state == Waiting){
         jobs->switchJobOn(job, true);
     }else{
         job->cmd->type = Foreground;
         jobs->setFg(job);
+=======
+    if(kill(last_stopped->pid,SIGCONT) == 0)
+    {
+        cout << cmd_line.c_str() << " : " << last_stopped->pid << "\n";
+        waitpid(last_stopped->pid,NULL,0);
+>>>>>>> Stashed changes
     }
-    jobs->waitForJob(job);
 }
 
+<<<<<<< Updated upstream
 void QuitCommand::execute(){
     if(args[1] && strcmp(args[1],"kill") == 0){
         cout << "sending SIGKILL signal to " << smash_p->jobs.free_job_ids.back() -1 << " jobs:" << endl;
@@ -457,6 +640,8 @@ void QuitCommand::execute(){
     //Kill smash
     exit(0);
 }
+=======
+>>>>>>> Stashed changes
 
 /**
 * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
@@ -464,8 +649,10 @@ void QuitCommand::execute(){
 Command * SmallShell::CreateCommand(const char* cmd_line, string orig_cmd = "") {
 //Parse arguments
     char* args[COMMAND_MAX_ARGS];
-    if(!_parseCommandLine(cmd_line, args)) return nullptr;
+    _parseCommandLine(cmd_line, args);
+//Get the first word in the command
     string cmd_s(args[0]);
+<<<<<<< Updated upstream
     if(_isBackgroundCommand(args[0])) _removeBackgroundSign(args[0]);
     if(_isPipeCommand(cmd_line)){
         return new PipeCommand(cmd_line, orig_cmd);
@@ -497,10 +684,43 @@ Command * SmallShell::CreateCommand(const char* cmd_line, string orig_cmd = "") 
     else if ((string("quit").find(cmd_s) && (args[0][4] == ' ')) || (cmd_s == "quit")){
         return new QuitCommand(cmd_line, this, orig_cmd); //Need to change the input
     }
+=======
+    if (cmd_s == "pwd") {
+        return new GetCurrDirCommand(cmd_line);
+    }
+
+    else if (cmd_s == "chprompt") {
+        return new ChangePromptCommand(cmd_line, this);
+    }
+    else if (cmd_s == "ls") {
+        return new GetDirContentCommand(cmd_line);
+    }
+    else if (cmd_s == "showpid") {
+        return new ShowPidCommand(cmd_line);
+    }
+    else if (cmd_s == "cd") {
+        return new ChangeDirCommand(cmd_line, oldp);
+    }
+    else if (cmd_s == "kill"){
+        return new KillCommand(cmd_line,&jobs);
+    }
+    else if (cmd_s == "bg"){
+        return new BackgroundCommand(cmd_line,&jobs);
+    }
+    else if (cmd_s == "jobs") {
+        return new JobsCommand(cmd_line, &jobs);
+    }
+    else if (cmd_s == "fg") {
+        return new ForegroundCommand(cmd_line, &jobs);
+    }
+
+>>>>>>> Stashed changes
     else {
         //cout << "INFO: Executing with bash." << endl;
     return new ExternalCommand(cmd_line, this, orig_cmd); //Need to change the input + output
     }
+
+    //return nullptr;
 }
 
 void SmallShell::executeCommand(const char *cmd_line) {
@@ -509,8 +729,8 @@ void SmallShell::executeCommand(const char *cmd_line) {
 
 
     Command* cmd = CreateCommand(cmd_line);
-    //jobs.removeFinishedJobs();
-    if(cmd) cmd->execute();
+    jobs.removeFinishedJobs();
+    cmd->execute();
 //    delete cmd;
 
     // Please note that you must fork smash process for some commands (e.g., external commands....)
