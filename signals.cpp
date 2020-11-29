@@ -11,15 +11,14 @@ using namespace std;
 
 void ctrlZHandler(int sig_num){
 	// TODO: Add your implementation
-    std::cout << "\nsmash: got ctrl-Z" << std::endl;
+    std::cout << "smash: got ctrl-Z" << std::endl;
     SmallShell& smash = SmallShell::getInstance();
     JobsList::JobEntry* job = smash.jobs.popFg();
     if(!job){
       return;
     }
-    kill(job->pid*(-1), sig_num);
+    kill(job->pid*(-1), SIGSTOP);
     std::cout << "smash: process " << job->pid << " was stopped" << std::endl;
-
 }
 
 void ctrlCHandler(int sig_num){

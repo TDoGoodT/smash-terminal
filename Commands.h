@@ -122,8 +122,9 @@ public:
 
 class ShowPidCommand : public BuiltInCommand {
 public:
-    ShowPidCommand(const char* cmd_line, string orig_cmd):
-    BuiltInCommand(cmd_line, orig_cmd){}
+    SmallShell* smash_p;
+    ShowPidCommand(const char* cmd_line, string orig_cmd, SmallShell* smash_p):
+    BuiltInCommand(cmd_line, orig_cmd), smash_p(smash_p){}
     virtual ~ShowPidCommand() {}
     void execute() override;
 };
@@ -234,6 +235,7 @@ public:
                 else running_queue.remove(job);
                 jobs_map.erase(jobId);
                 free_job_ids.push_back(jobId);
+                if(job == fg_job) fg_job = nullptr;
                 delete job;
             }
         }else{
@@ -344,9 +346,6 @@ public:
             perror("waitpid");
             exit(EXIT_FAILURE);
         }
-
-        std::cout << WEXITSTATUS(wstatus) << std::endl;
-
         if (WIFEXITED(wstatus) || WIFSIGNALED(wstatus)) removeJob(job);
         else if (WIFSTOPPED(wstatus)){
             //std::cout << "here";

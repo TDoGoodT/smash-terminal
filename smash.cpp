@@ -18,12 +18,12 @@ int main(int argc, char* argv[]) {
     SmallShell& smash = SmallShell::getInstance();
     //std::cout << "smash is running with pid " << getpid() << std::endl;
     while(true){
-            std::cout << smash.getName() + ">";
+            //assert(smash.jobs.getFg() == nullptr);
+            std::cout << smash.getName() + "> ";
             std::string cmd_line;
             std::getline(std::cin, cmd_line);
             smash.executeCommand(cmd_line.c_str());
             smash.jobs.removeFinishedJobs();
-            //assert(smash.jobs.getFg() == nullptr);
         }
     return 0;
 }

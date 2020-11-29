@@ -160,6 +160,20 @@ bool _isNumber(const string& s){
     return !s.empty() && find_if(s.begin(),
         s.end(), [](unsigned char c) { return !isdigit(c); }) == s.end();
 }
+
+void _execCmd(string run_cmd){
+        char cmd[COMMAND_ARGS_MAX_LENGTH];
+        strcpy(cmd, run_cmd.c_str());
+        char bash[] = "/bin/bash";
+        char flags[] = "-c";
+        char* argv[4];
+        argv[0] = bash;
+        argv[1] = flags;
+        argv[2] = cmd;
+        argv[3] = NULL;
+        EXEC(*argv, argv);
+        assert(0);
+}
 // TODO: Add your implementation for classes in Commands.h
 
 SmallShell::SmallShell():
@@ -229,30 +243,10 @@ void ExternalCommand::execute(){
         }
         else{
             setpgrp();
-            char cmd[COMMAND_ARGS_MAX_LENGTH];
-            strcpy(cmd, run_cmd.c_str());
-            char bash[] = "/bin/bash";
-            char flags[] = "-c";
-            char* argv[4];
-            argv[0] = bash;
-            argv[1] = flags;
-            argv[2] = cmd;
-            argv[3] = NULL;
-            EXEC(*argv, argv);
-            assert(0);
+            _execCmd(run_cmd);
         }
     }else{
-        char cmd[COMMAND_ARGS_MAX_LENGTH];
-        strcpy(cmd, run_cmd.c_str());
-        char bash[] = "/bin/bash";
-        char flags[] = "-c";
-        char* argv[4];
-        argv[0] = bash;
-        argv[1] = flags;
-        argv[2] = cmd;
-        argv[3] = NULL;
-        EXEC(*argv, argv);
-        assert(0);
+        _execCmd(run_cmd);
     }
 }
 RedirectionCommand::RedirectionCommand(const char* cmd_line, SmallShell* smash_p, string orig_cmd):
@@ -266,7 +260,7 @@ RedirectionCommand::RedirectionCommand(const char* cmd_line, SmallShell* smash_p
             append = true;
             _removeFirstOfSign(cmd_line_cpy, ">");
         }
-        
+
         if(_isBackgroundCommand(cmd_line_cpy)){
             type = Background;
             _removeBackgroundSign(cmd_line_cpy);
@@ -276,23 +270,20 @@ RedirectionCommand::RedirectionCommand(const char* cmd_line, SmallShell* smash_p
         out_file_path = string(args[argn-1]);
 
         string  new_cmd(cmd_line_cpy);
-        std::size_t pos = new_cmd.find(out_file_path);
+        std::size_t pos = new_cmd.rfind(out_file_path);
         assert(pos != string::npos);
         new_cmd = new_cmd.substr(0, pos);
         if(type == Background) new_cmd += "&";
-        cmd = smash_p->CreateCommand(new_cmd.c_str(), string(orig_cmd));
+        cmd = smash_p->CreateCommand(new_cmd.c_str(), orig_cmd);
     }
 void RedirectionCommand::execute(){
     pid_t c_pid = fork();
     if(c_pid > 0){ //father
         //assert(smash_p->jobs.fg_job == nullptr);
-        JobsList::JobEntry* new_job;
         if(type == Foreground){
             JobsList::JobEntry * new_job = new JobsList::JobEntry(0, c_pid, Running, this);
             smash_p->jobs.fg_job = new_job;
-            cout << "Waiting" <<endl;
             smash_p->jobs.waitForJob(new_job);
-            cout << "Done" <<endl;
         }else{
             smash_p->jobs.addJob(this, c_pid);
         }
@@ -315,7 +306,10 @@ void RedirectionCommand::prepare() {
 void RedirectionCommand::cleanup() {
     if(fd > 0) close(fd);
 }
-PipeCommand::PipeCommand(const char* cmd_line, string orig_cmd):Command(cmd_line, orig_cmd){}
+PipeCommand::PipeCommand(const char* cmd_line, string orig_cmd):
+    Command(cmd_line, orig_cmd){
+
+    }
 void PipeCommand::execute(){}
 
 void GetCurrDirCommand::execute(){
@@ -346,7 +340,7 @@ void ChangePromptCommand::execute(){
 
 void ShowPidCommand::execute(){
 
-    cout << "smash pid is " << getpid() << endl;
+    cout << "smash pid is " << smash_p->pid << endl;
 }
 
 ChangeDirCommand::ChangeDirCommand(const char *cmd_line, string plastPwd, string orig_cmd):
@@ -431,15 +425,12 @@ void ForegroundCommand::execute(){
     }
     JobsList::JobEntry* job = (job_id > 0) ? jobs->getJobById(job_id): jobs->getLastJob(&job_id);
     if(!job){
-        string error_s;
-        if(!job_id)
-            error_s = string("smash error: fg: jobs list is empty");
-        else
-            error_s = string("smash error: fg: job-id ",job_id) + string( " does not exist");
+        string error_s = (!job_id) ? string("smash error: fg: jobs list is empty") :
+                                    string("smash error: fg: job-id ") + to_string(job_id) + string( " does not exist");
         perror(error_s.c_str());
         return;
     }
-    cout << cmd_line.c_str() << " : " << job->pid << endl;
+    cout << job->cmd->orig_cmd_line.c_str() << " : " << job->pid << endl;
     if(job->execution_state == Waiting){
         jobs->switchJobOn(job, true);
     }else{
@@ -463,6 +454,7 @@ void QuitCommand::execute(){
 */
 Command * SmallShell::CreateCommand(const char* cmd_line, string orig_cmd = "") {
 //Parse arguments
+    if(orig_cmd == "") orig_cmd = string(cmd_line);
     char* args[COMMAND_MAX_ARGS];
     if(!_parseCommandLine(cmd_line, args)) return nullptr;
     string cmd_s(args[0]);
@@ -483,7 +475,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line, string orig_cmd = "") 
         return new GetDirContentCommand(cmd_line, orig_cmd); //Need to change the output
     }
     else if ((string("showpid").find(cmd_s) && (args[0][7] == ' ')) || (cmd_s == "showpid")) {
-        return new ShowPidCommand(cmd_line, orig_cmd); //Need to change the output
+        return new ShowPidCommand(cmd_line, orig_cmd, this); //Need to change the output
     }
     else if ((string("cd").find(cmd_s) && (args[0][2] == ' ')) || (cmd_s == "cd")) {
         return new ChangeDirCommand(cmd_line, oldp, orig_cmd); //Need to change the input
@@ -498,7 +490,6 @@ Command * SmallShell::CreateCommand(const char* cmd_line, string orig_cmd = "") 
         return new QuitCommand(cmd_line, this, orig_cmd); //Need to change the input
     }
     else {
-        //cout << "INFO: Executing with bash." << endl;
     return new ExternalCommand(cmd_line, this, orig_cmd); //Need to change the input + output
     }
 }
