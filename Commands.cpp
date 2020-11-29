@@ -351,7 +351,8 @@ void PipeCommand::execute(){
         pipe(fd); // first child out --> second child in
         pid_t c_pid1 = fork();
         if (c_pid1 == 0) {// first child 
-            dup2(fd[1],1);
+            if(errPipe) dup2(fd[1],2);
+            else dup2(fd[1],1);
             close(fd[0]);
             close(fd[1]);
             cmd1->execute();
@@ -384,7 +385,7 @@ void GetDirContentCommand::execute(){
     int n = scandir(".", &namelist, 0, alphasort);
     if (n < 0) perror("smash error: scandir failed");
     else{
-        for (int i = 0; i < n; i++){
+        for (int i = 2; i < n; i++){
             cout << namelist[i]->d_name << endl;
             free(namelist[i]);
         }
@@ -479,7 +480,9 @@ void KillCommand::execute(){
     else{
         int sig;
         int id;
-        if(stringstream(s[1])<<sig && stringstream(s[2])<<id){
+        try{
+            sig = stoi(s[1]);
+            id = stoi(s[2]);
             sig = sig * (-1);
             pid_t p;
             if(jobs->getJobById(id)!=nullptr){
@@ -495,12 +498,10 @@ void KillCommand::execute(){
                 std::cerr << s;
                 std::cerr << id;
                 perror(" does not exist");
-                std::cerr << endl;
             }
             return;
-        }else{
+        }catch(std::invalid_argument& e){
             perror("smash error: kill: invalid argumetns");
-            std::cerr << endl;
             return;
         }
     }
@@ -517,7 +518,9 @@ void BackgroundCommand::execute(){
     }else{ //Less then two parameters
         if(s.size()==2){ //exacly two parameters
             int id;
-            if(stringstream(s[1])<<id){
+            //if(stringstream(s[1])<<id){
+            try{
+                id = stoi(s[1]);
                 JobsList::JobEntry *job = jobs->getJobById(id);
                 if(job){
                     if(job->execution_state==Running){
@@ -537,7 +540,7 @@ void BackgroundCommand::execute(){
                    std::cerr << "smash error: bg: job-id " << id << " does not exist" << std::endl;
                    return;
                 }
-            }else{
+            }catch(std::invalid_argument& e){
                 perror("smash error: bg: invalid arguments");
                 return;
             }
@@ -575,16 +578,20 @@ void JobsCommand::execute(){
 void ForegroundCommand::execute(){
 // TODO: test
     jobs->removeFinishedJobs();
-    if(args[1]){
-        if(_isNumber(string(args[1]))) job_id = stoi(args[1]);
-        else{
+    if(args[1] && !args[2]){
+        try{
+            job_id = stoi(args[1]);
+        }catch(std::invalid_argument& e){
             perror("smash error: fg: invalid arguments");
             return;
         }
+    }else if(args[2]){
+        perror("smash error: fg: invalid arguments");
+            return;
     }
     JobsList::JobEntry* job = (job_id > 0) ? jobs->getJobById(job_id): jobs->getLastJob(&job_id);
     if(!job){
-        string error_s = (!job_id) ? string("smash error: fg: jobs list is empty") :
+        string error_s = (job_id == 0)  ? string("smash error: fg: jobs list is empty") :
                                     string("smash error: fg: job-id ") + to_string(job_id) + string( " does not exist");
         perror(error_s.c_str());
         return;
@@ -601,7 +608,7 @@ void ForegroundCommand::execute(){
 
 void QuitCommand::execute(){
     if(args[1] && strcmp(args[1],"kill") == 0){
-        cout << "sending SIGKILL signal to " << smash_p->jobs.free_job_ids.back() -1 << " jobs:" << endl;
+        cout << "smash: sending SIGKILL signal to " << smash_p->jobs.free_job_ids.back() -1 << " jobs:" << endl;
         smash_p->jobs.killAllJobs();
     }
     //Kill smash
