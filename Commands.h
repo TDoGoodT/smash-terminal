@@ -19,6 +19,8 @@ using std::string;
 using std::vector;
 using std::map;
 using std::list;
+using std::istream;
+using std::ostream;
 enum Type {Foreground, Background};
 enum ExecState {/*Ready,*/ Running, Waiting};
 
@@ -29,11 +31,12 @@ public:
     Type type;
     string  cmd_line;
     char*   args[COMMAND_MAX_ARGS];
-    Command(const char* cmd_line);
+    Command(const char* cmd_line):
+        cmd_line(string(cmd_line)){}
     virtual ~Command() {}
     virtual void execute() = 0;
-//virtual void prepare();
-//virtual void cleanup();
+    virtual void prepare() {}
+    virtual void cleanup() {}
 // TODO: Add your extra methods if needed
 };
 
@@ -58,18 +61,23 @@ class PipeCommand : public Command {
 // TODO: Add your data members
 public:
     PipeCommand(const char* cmd_line);
-    virtual ~PipeCommand();
+    virtual ~PipeCommand() {}
     void execute() override;
 };
 
 class RedirectionCommand : public Command {
 // TODO: Add your data members
+    bool append;
+    int fd;
+    const char* out_file_path;
+    Command* cmd;
+    SmallShell* smash_p;
 public:
-    explicit RedirectionCommand(const char* cmd_line);
-    virtual ~RedirectionCommand();
+    explicit RedirectionCommand(const char* cmd_line, SmallShell* smash_p);
+    virtual ~RedirectionCommand() {}
     void execute() override;
-//void prepare() override;
-//void cleanup() override;
+    void prepare() override;
+    void cleanup() override;
 };
 
 class ChangeDirCommand : public BuiltInCommand {
@@ -191,7 +199,7 @@ public:
                             <<  job.cmd->cmd_line << " : "      \
                             << job.pid << " "                   \
                             << time(nullptr) - job.start_time   \
-                            << " secs " << stopped << "\n";
+                            << " secs " << stopped << std::endl;
             }
         }
     }
@@ -302,7 +310,7 @@ public:
         waiting_queue.push_back(job);
         job->execution_state = Waiting;
         kill(job->pid*(-1), SIGSTOP);
-        std::cout << "smash: process " << job->pid << " was stopped\n";
+        std::cout << "smash: process " << job->pid << " was stopped" << std::endl;
     }
     void switchJobOn(JobEntry* job, bool move_to_fg = false){
         assert((move_to_fg && fg_job) == 0);
@@ -327,21 +335,19 @@ public:
         assert(job->cmd->type == Foreground);
         assert(fg_job == job);
         int wstatus = -1;
-        do {
-            int w = waitpid(job->pid, &wstatus,  WNOHANG | WUNTRACED);
-            if (w == -1) {
-                perror("waitpid");
-                exit(EXIT_FAILURE);
-            }
-
-            if (WIFEXITED(wstatus) || WIFSIGNALED(wstatus)) removeJob(job);
-            else if (WIFSTOPPED(wstatus)){
-                job->execution_state = Waiting;
-                job->cmd->type = Background;
-                insertJob(job);
-                break;
-            }
-        } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
+        int w = waitpid(job->pid, &wstatus,  WUNTRACED);
+        if (w == -1) {
+            perror("waitpid");
+            exit(EXIT_FAILURE);
+        }
+        if (WIFEXITED(wstatus) || WIFSIGNALED(wstatus)) removeJob(job);
+        else if (WIFSTOPPED(wstatus)){
+            //std::cout << "here";
+            job->execution_state = Waiting;
+            job->cmd->type = Background;
+            insertJob(job);
+            //break;
+        }
     }
 };
 
@@ -387,7 +393,7 @@ public:
 };
 
 // TODO: add more classes if needed
-// maybe ls, timeout ?
+// maybe timeout ?
 
 class SmallShell {
 private:
