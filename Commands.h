@@ -19,8 +19,6 @@ using std::string;
 using std::vector;
 using std::map;
 using std::list;
-using std::istream;
-using std::ostream;
 enum Type {Foreground, Background};
 enum ExecState {/*Ready,*/ Running, Waiting};
 
@@ -30,29 +28,20 @@ class Command {
 public:
     Type type;
     string  cmd_line;
-    string  orig_cmd_line;
     char*   args[COMMAND_MAX_ARGS];
-    Command(const char* cmd_line, string orig_cmd_line = ""):
-        cmd_line(string(cmd_line)){
-            if(orig_cmd_line == "") this->orig_cmd_line  = string(cmd_line);
-            else this->orig_cmd_line = string(orig_cmd_line);
-        }
+    Command(const char* cmd_line);
     virtual ~Command() {}
     virtual void execute() = 0;
-    virtual void prepare() {}
-    virtual void cleanup() {}
+//virtual void prepare();
+//virtual void cleanup();
 // TODO: Add your extra methods if needed
 };
 
 class BuiltInCommand : public Command {
     //std::string[COMMAND_MAX_ARGS] args;
 public:
-<<<<<<< Updated upstream
-    BuiltInCommand(const char* cmd_line, string orig_cmd);
-=======
     BuiltInCommand(const char* cmd_line):
     Command(cmd_line) {}
->>>>>>> Stashed changes
     virtual ~BuiltInCommand() {}
     void execute() override;
 };
@@ -61,13 +50,9 @@ class ExternalCommand : public Command {
 private:
      SmallShell* smash_p;
 public:
-<<<<<<< Updated upstream
-    ExternalCommand(const char* cmd_line, SmallShell* smash_p, string orig_cmd);
-=======
     ExternalCommand(const char* cmd_line, SmallShell* smash_p):
             Command(cmd_line),
             smash_p(smash_p) {}
->>>>>>> Stashed changes
     virtual ~ExternalCommand() {}
     void execute() override;
 };
@@ -75,47 +60,42 @@ public:
 class PipeCommand : public Command {
 // TODO: Add your data members
 public:
-    PipeCommand(const char* cmd_line, string orig_cmd);
-    virtual ~PipeCommand() {}
+    PipeCommand(const char* cmd_line);
+    virtual ~PipeCommand();
     void execute() override;
 };
 
 class RedirectionCommand : public Command {
 // TODO: Add your data members
-    bool append;
-    int fd;
-    string out_file_path;
-    Command* cmd;
-    SmallShell* smash_p;
 public:
-    explicit RedirectionCommand(const char* cmd_line, SmallShell* smash_p, string orig_cmd);
-    virtual ~RedirectionCommand() {}
+    explicit RedirectionCommand(const char* cmd_line);
+    virtual ~RedirectionCommand();
     void execute() override;
-    void prepare() override;
-    void cleanup() override;
+//void prepare() override;
+//void cleanup() override;
 };
 
 class ChangeDirCommand : public BuiltInCommand {
 // TODO: Add your data members
 public:
     std::string old;
-    ChangeDirCommand(const char* cmd_line, std::string plastPwd, string orig_cmd);
+    ChangeDirCommand(const char* cmd_line, std::string plastPwd);
     virtual ~ChangeDirCommand() {}
     void execute() override;
 };
 
 class GetCurrDirCommand : public BuiltInCommand {
 public:
-    GetCurrDirCommand(const char* cmd_line, string orig_cmd):
-    BuiltInCommand(cmd_line, orig_cmd) {}
+    GetCurrDirCommand(const char* cmd_line):
+    BuiltInCommand(cmd_line) {}
     virtual ~GetCurrDirCommand() {}
     void execute() override;
 };
 
 class GetDirContentCommand : public BuiltInCommand {
 public:
-    GetDirContentCommand(const char* cmd_line, string orig_cmd):
-    BuiltInCommand(cmd_line, orig_cmd) {}
+    GetDirContentCommand(const char* cmd_line):
+    BuiltInCommand(cmd_line) {}
     virtual ~GetDirContentCommand() {}
     void execute() override;
 };
@@ -124,8 +104,8 @@ class ChangePromptCommand : public BuiltInCommand {
 protected:
     SmallShell* smash_p;
 public:
-    ChangePromptCommand(const char* cmd_line, SmallShell* smash_p, string orig_cmd):
-    BuiltInCommand(cmd_line, orig_cmd),
+    ChangePromptCommand(const char* cmd_line, SmallShell* smash_p):
+    BuiltInCommand(cmd_line),
     smash_p(smash_p) {}
     virtual ~ChangePromptCommand() {}
     void execute() override;
@@ -133,8 +113,8 @@ public:
 
 class ShowPidCommand : public BuiltInCommand {
 public:
-    ShowPidCommand(const char* cmd_line, string orig_cmd):
-    BuiltInCommand(cmd_line, orig_cmd){}
+    ShowPidCommand(const char* cmd_line):
+    BuiltInCommand(cmd_line){}
     virtual ~ShowPidCommand() {}
     void execute() override;
 };
@@ -143,13 +123,7 @@ class JobsList;
 class QuitCommand : public BuiltInCommand {
 // TODO: Add your data members
 public:
-<<<<<<< Updated upstream
-    QuitCommand(const char* cmd_line, SmallShell* smash_p, string orig_cmd):
-    BuiltInCommand(cmd_line, orig_cmd),
-    smash_p(smash_p) {}
-=======
     QuitCommand(const char* cmd_line, JobsList* jobs);
->>>>>>> Stashed changes
     virtual ~QuitCommand() {}
     void execute() override;
 };
@@ -210,10 +184,10 @@ public:
                 JobEntry job = *jobs_map[i];
                 const char * stopped = (job.execution_state ==  Waiting)  ? "(stopped)" : "";
                 std::cout   << "[" << job.job_id << "] "        \
-                            <<  job.cmd->orig_cmd_line << " : "      \
+                            <<  job.cmd->cmd_line << " : "      \
                             << job.pid << " "                   \
                             << time(nullptr) - job.start_time   \
-                            << " secs " << stopped << std::endl;
+                            << " secs " << stopped << "\n";
             }
         }
     }
@@ -257,81 +231,6 @@ public:
         return getLastJob(jobId);
     }
 // TODO: Add extra methods or modify exisitng ones as needed
-<<<<<<< Updated upstream
-    void insertJob(JobEntry* job){
-        assert(jobs_map[job->job_id] == nullptr || jobs_map[job->job_id] == job);
-        if(job->job_id == 0){
-            insertNewJob(job);
-        }else{
-            assert(jobs_map[job->job_id] == job);
-            auto proc_list = job->execution_state == Waiting ? &waiting_queue : &running_queue;
-            proc_list->push_back(job);
-        }
-    }
-    void insertNewJob(JobEntry* job){
-        assert(jobs_map[job->job_id] == nullptr);
-        job->job_id = _getValidJobId();
-        jobs_map[job->job_id] = job;
-        auto proc_list = job->execution_state == Waiting ? &waiting_queue : &running_queue;
-        proc_list->push_back(job);
-    }
-    void switchJobOff(JobEntry* job){
-        if(!job) return;
-        if(fg_job == job) {
-            fg_job = nullptr;
-            if(job->job_id == 0){
-                job->job_id = _getValidJobId();
-                jobs_map[job->job_id] = job;
-            }
-        }
-        running_queue.remove(job);
-        waiting_queue.push_back(job);
-        job->execution_state = Waiting;
-        kill(job->pid*(-1), SIGSTOP);
-        std::cout << "smash: process " << job->pid << " was stopped" << std::endl;
-    }
-    void switchJobOn(JobEntry* job, bool move_to_fg = false){
-        assert((move_to_fg && fg_job) == 0);
-        if(move_to_fg){
-            assert(fg_job == nullptr);
-            job->cmd->type = Foreground;
-            fg_job = job;
-        }
-        waiting_queue.remove(job);
-        running_queue.push_back(job);
-        job->execution_state = Running;
-        kill(job->pid*(-1), SIGCONT);
-    }
-    JobsList::JobEntry* getJobByPid(int pid){
-        for(auto job : jobs_map)
-        {
-            if(job.second && job.second->pid == pid) return job.second;
-        }
-        return nullptr;
-    }
-    void waitForJob(JobsList::JobEntry* job){
-        assert(job->cmd->type == Foreground);
-        assert(fg_job == job);
-        int wstatus = -1;
-        int w = waitpid(job->pid, &wstatus,  WUNTRACED);
-        if (w == -1) {
-            perror("waitpid");
-            exit(EXIT_FAILURE);
-        }
-
-        std::cout << WEXITSTATUS(wstatus) << std::endl;
-
-        if (WIFEXITED(wstatus) || WIFSIGNALED(wstatus)) removeJob(job);
-        else if (WIFSTOPPED(wstatus)){
-            //std::cout << "here";
-            job->execution_state = Waiting;
-            job->cmd->type = Background;
-            insertJob(job);
-            //break;
-        }
-    }
-=======
->>>>>>> Stashed changes
 };
 
 
@@ -340,8 +239,8 @@ class JobsCommand : public BuiltInCommand {
 private:
     JobsList* jobs;
 public:
-    JobsCommand(const char* cmd_line, JobsList* jobs, string orig_cmd):
-    BuiltInCommand(cmd_line, orig_cmd), jobs(jobs) {}
+    JobsCommand(const char* cmd_line, JobsList* jobs):
+    BuiltInCommand(cmd_line), jobs(jobs) {}
     virtual ~JobsCommand() {}
     void execute() override;
 };
@@ -350,11 +249,7 @@ class KillCommand : public BuiltInCommand {
 // TODO: Add your data members
     JobsList *jobs;
 public:
-<<<<<<< Updated upstream
-    KillCommand(const char* cmd_line, JobsList* jobs, string orig_cmd);
-=======
     KillCommand(const char* cmd_line, JobsList *jobs);
->>>>>>> Stashed changes
     virtual ~KillCommand() {}
     void execute() override;
 };
@@ -366,8 +261,8 @@ private:
     int job_id;
 
 public:
-    ForegroundCommand(const char* cmd_line, JobsList* jobs, string orig_cmd, int job_id = 0):
-        BuiltInCommand(cmd_line, orig_cmd), jobs(jobs), job_id(job_id) {}
+    ForegroundCommand(const char* cmd_line, JobsList* jobs, int job_id = 0):
+        BuiltInCommand(cmd_line), jobs(jobs), job_id(job_id) {}
     virtual ~ForegroundCommand() {}
     void execute() override;
 };
@@ -376,13 +271,13 @@ class BackgroundCommand : public BuiltInCommand {
 // TODO: Add your data members
     JobsList *jobs;
 public:
-    BackgroundCommand(const char* cmd_line, JobsList* jobs, string orig_cmd);
+    BackgroundCommand(const char* cmd_line, JobsList* jobs);
     virtual ~BackgroundCommand() {}
     void execute() override;
 };
 
 // TODO: add more classes if needed
-// maybe timeout ?
+// maybe ls, timeout ?
 
 class SmallShell {
 private:
@@ -392,8 +287,7 @@ private:
 public:
     static std::string oldp;
     JobsList jobs;
-    pid_t   pid;
-    Command *CreateCommand(const char* cmd_line, string orig_cmd);
+    Command *CreateCommand(const char* cmd_line);
     SmallShell(SmallShell const&)      = delete; // disable copy ctor
     void operator=(SmallShell const&)  = delete; // disable = operator
     static SmallShell& getInstance() // make SmallShell singleton

@@ -1,26 +1,7 @@
 # depslib dependency file v1.0
-<<<<<<< Updated upstream
-1606664387 source:/home/student/OS/vscode/hw1/HW1_OS/Commands.cpp
-	<dirent.h>
-	<algorithm>
-	<unistd.h>
-	<string>
-	<string.h>
-=======
 1606217817 source:/home/student/HW/HW1_OS-master (1)/HW1_OS-master/signals.cpp
->>>>>>> Stashed changes
 	<iostream>
 	<signal.h>
-<<<<<<< Updated upstream
-	<string>
-	<stdlib.h>
-	<sys/types.h>
-	<sys/stat.h>
-	<fcntl.h>
-	"Commands.h"
-
-1606666311 /home/student/OS/vscode/hw1/HW1_OS/Commands.h
-=======
 	<sys/types.h>
 	<unistd.h>
 	"signals.h"
@@ -29,7 +10,6 @@
 1606217817 /home/student/HW/HW1_OS-master (1)/HW1_OS-master/signals.h
 
 1606673060 /home/student/HW/HW1_OS-master (1)/HW1_OS-master/Commands.h
->>>>>>> Stashed changes
 	<sys/wait.h>
 	<numeric>
 	<vector>
@@ -38,11 +18,7 @@
 	<list>
 	<iostream>
 
-<<<<<<< Updated upstream
-1606647737 source:/home/student/OS/vscode/hw1/HW1_OS/signals.cpp
-=======
 1606217817 source:/home/student/HW/HW1_OS-master (1)/HW1_OS-master/smash.cpp
->>>>>>> Stashed changes
 	<iostream>
 	<unistd.h>
 	<sys/wait.h>
@@ -50,16 +26,9 @@
 	"Commands.h"
 	"signals.h"
 
-<<<<<<< Updated upstream
-1606474898 /home/student/OS/vscode/hw1/HW1_OS/signals.h
-
-1606606321 source:/home/student/OS/vscode/hw1/HW1_OS/smash.cpp
-	<iostream>
-=======
 1606661812 source:/home/student/HW/HW1_OS-master (1)/HW1_OS-master/Commands.cpp
 	<dirent.h>
 	<algorithm>
->>>>>>> Stashed changes
 	<unistd.h>
 	<string>
 	<string.h>
