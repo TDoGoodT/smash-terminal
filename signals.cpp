@@ -25,8 +25,14 @@ void ctrlZHandler(int sig_num)
 void ctrlCHandler(int sig_num)
 {
   // TODO: Add your implementation
-    std::cout << "smash: got ctrl-C in " << getpid();
-    kill(getpid(),SIGKILL);
+    std::cout << "smash: got ctrl-C" << std::endl;
+    SmallShell& smash = SmallShell::getInstance();
+    JobsList::JobEntry* job = smash.jobs.popFg();
+    if(!job){
+      return;
+    }
+    kill(job->pid*(-1), SIGKILL);
+    std::cout << "smash: process " << job->pid << " was killed" << std::endl;
 }
 
 void alarmHandler(int sig_num)
