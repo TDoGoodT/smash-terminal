@@ -32,10 +32,10 @@ public:
     string  cmd_line;
     string  orig_cmd_line;
     char*   args[COMMAND_MAX_ARGS];
-    Command(const char* cmd_line, string orig_cmd_line = ""):
+    Command(const char* cmd_line, string orig_cmd_line):
         cmd_line(string(cmd_line)){
             if(orig_cmd_line == "") this->orig_cmd_line  = string(cmd_line);
-            else this->orig_cmd_line = string(orig_cmd_line);
+            else this->orig_cmd_line = orig_cmd_line;
         }
     virtual ~Command() {}
     virtual void execute() = 0;
@@ -371,8 +371,9 @@ public:
 
 class KillCommand : public BuiltInCommand {
 // TODO: Add your data members
+    JobsList *jobs;
 public:
-    KillCommand(const char* cmd_line, JobsList* jobs, string orig_cmd);
+    KillCommand(const char* cmd_line, JobsList *jobs, string orig_cmd);
     virtual ~KillCommand() {}
     void execute() override;
 };
@@ -392,6 +393,7 @@ public:
 
 class BackgroundCommand : public BuiltInCommand {
 // TODO: Add your data members
+    JobsList *jobs;
 public:
     BackgroundCommand(const char* cmd_line, JobsList* jobs, string orig_cmd);
     virtual ~BackgroundCommand() {}
@@ -410,7 +412,7 @@ public:
     static std::string oldp;
     JobsList jobs;
     pid_t   pid;
-    Command *CreateCommand(const char* cmd_line, string orig_cmd);
+    Command *CreateCommand(const char* cmd_line, string orig_cmd = "");
     SmallShell(SmallShell const&)      = delete; // disable copy ctor
     void operator=(SmallShell const&)  = delete; // disable = operator
     static SmallShell& getInstance() // make SmallShell singleton
