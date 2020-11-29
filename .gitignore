@@ -38,3 +38,13 @@ temp/temp.depend
 temp/temp.layout
 temp/bin/Debug/temp
 temp/obj/Debug/main.o
+smash.depend
+bin/Debug/smash
+obj/Debug/Commands.o
+obj/Debug/signals.o
+obj/Debug/smash.o
+smash.depend
+bin/Debug/smash
+obj/Debug/Commands.o
+obj/Debug/signals.o
+obj/Debug/smash.o
