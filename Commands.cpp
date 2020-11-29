@@ -10,15 +10,18 @@
 #include <signal.h>
 #include <string>
 #include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 
 
 #include "Commands.h"
 
 using namespace std;
-const std::string WHITESPACE = " \n\r\t\f\v";
+const string WHITESPACE = " \n\r\t\f\v";
 
-std::string SmallShell::oldp = "";
+string SmallShell::oldp = "";
 #if 0
 #define FUNC_ENTRY()  \
   cerr << __PRETTY_FUNCTION__ << " --> " << endl;
@@ -34,20 +37,19 @@ std::string SmallShell::oldp = "";
 
 #define EXEC(path, arg) \
   execvp((path), (arg));
-
-string _ltrim(const std::string& s)
+string _ltrim(const string& s)
 {
   size_t start = s.find_first_not_of(WHITESPACE);
-  return (start == std::string::npos) ? "" : s.substr(start);
+  return (start == string::npos) ? "" : s.substr(start);
 }
 
-string _rtrim(const std::string& s)
+string _rtrim(const string& s)
 {
   size_t end = s.find_last_not_of(WHITESPACE);
-  return (end == std::string::npos) ? "" : s.substr(0, end + 1);
+  return (end == string::npos) ? "" : s.substr(0, end + 1);
 }
 
-string _trim(const std::string& s)
+string _trim(const string& s)
 {
   return _rtrim(_ltrim(s));
 }
@@ -67,24 +69,35 @@ const vector<string> explode(const string& s, const char c)
 }
 
 int _parseCommandLine(const char* cmd_line, char** args) {
-  FUNC_ENTRY()
-  int i = 0;
-  std::istringstream iss(_trim(string(cmd_line)).c_str());
-  for(std::string s; iss >> s; ) {
-    args[i] = (char*)malloc(s.length()+1);
-    memset(args[i], 0, s.length()+1);
-    strcpy(args[i], s.c_str());
-    args[++i] = NULL;
-  }
-  return i;
+    FUNC_ENTRY()
+    int i = 0;
+    istringstream iss(_trim(string(cmd_line)).c_str());
+    for(string s; iss >> s; ) {
+        args[i] = (char*)malloc(s.length()+1);
+        memset(args[i], 0, s.length()+1);
+        strcpy(args[i], s.c_str());
+        args[++i] = NULL;
+    }
+    return i;
 
-  FUNC_EXIT()
+    FUNC_EXIT()
 }
 
 bool _isBackgroundCommand(const char* cmd_line) {
-  const string str(cmd_line);
-  return str[str.find_last_not_of(WHITESPACE)] == '&';
+    const string str(cmd_line);
+    return str[str.find_last_not_of(WHITESPACE)] == '&';
 }
+
+bool _isRedirectonCommand(const char* cmd_line) {
+    const string str(cmd_line);
+    return (str.find_first_of(">") != string::npos);
+}
+
+bool _isPipeCommand(const char* cmd_line) {
+    const string str(cmd_line);
+    return (str.find_first_of("|") != string::npos);
+}
+
 
 void _removeBackgroundSign(char* cmd_line) {
   const string str(cmd_line);
@@ -104,17 +117,48 @@ void _removeBackgroundSign(char* cmd_line) {
   cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
+void _removeFirstOfSign(char* cmd_line, string sign) {
+  const string str(cmd_line);
+  unsigned int idx = str.find_first_of(sign);
+  if (idx == string::npos) {
+    return;
+  }
+  if (cmd_line[idx] != sign[0] && ( sign.length() == 1 || cmd_line[idx+1] != sign[1])) {
+    return;
+  }
+  cmd_line[idx] = ' ';
+  if(sign.length() > 1){
+      assert(sign.length() == 2);
+      cmd_line[idx + 1] = ' ';
+  }
+}
+
+void _removeLastOfSignAndTrunc(char* cmd_line, string sign) {
+  const string str(cmd_line);
+  unsigned int idx = str.find_last_of(sign);
+  if (idx == string::npos) {
+    return;
+  }
+  if (cmd_line[idx] != sign[0] && ( sign.length() == 1 || cmd_line[idx+1] != sign[1])) {
+    return;
+  }
+  cmd_line[idx] = ' ';
+  if(sign.length() > 1){
+      assert(sign.length() == 2);
+      cmd_line[++idx] = ' ';
+  }
+  cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
+}
+
 
 static const string _getCurrDir()
 {
-    char buff[BUFSIZ];
-    getcwd(buff, BUFSIZ);
-    return string(buff);
+    return string(get_current_dir_name());
 }
 
-bool _isNumber(const std::string& s){
-    return !s.empty() && std::find_if(s.begin(),
-        s.end(), [](unsigned char c) { return !std::isdigit(c); }) == s.end();
+bool _isNumber(const string& s){
+    return !s.empty() && find_if(s.begin(),
+        s.end(), [](unsigned char c) { return !isdigit(c); }) == s.end();
 }
 // TODO: Add your implementation for classes in Commands.h
 
@@ -139,40 +183,31 @@ void SmallShell::addJob(Command* cmd,  pid_t pid, bool isStopped)
 {
     this->jobs.addJob(cmd,pid);
 }*/
-
-Command::Command(const char* cmd_line) {
-// TODO: add your implementation
-    this->cmd_line = string(cmd_line);
-    char new_cmd_line[this->cmd_line.length()+1];
-    strcpy(new_cmd_line, cmd_line);
-    type = _isBackgroundCommand(cmd_line) ? Background :  Foreground;
-    _removeBackgroundSign(new_cmd_line);
-    _parseCommandLine(new_cmd_line, args);
-}
-
 BuiltInCommand::BuiltInCommand(const char* cmd_line):
     Command(cmd_line) {
-        char new_cmd_line[this->cmd_line.length()+1];
-        strcpy(new_cmd_line, cmd_line);
-        _removeBackgroundSign(new_cmd_line);
-        type = Foreground;
-        this->cmd_line = string(new_cmd_line);
-    }
-
-void BuiltInCommand::execute(){
-// TODO: add your implementation 
+    assert(_isBackgroundCommand(cmd_line) == false);//_removeBackgroundSign(new_cmd_line);
+    type = Foreground;
+    _parseCommandLine(cmd_line,args);
+    this->cmd_line = string(cmd_line);
 }
-
+void BuiltInCommand::execute(){
+// TODO: add your implementation
+}
 ExternalCommand::ExternalCommand(const char* cmd_line, SmallShell* smash_p):
         Command(cmd_line),
         smash_p(smash_p){
-    if(type == Background){
-        char new_cmd_line[this->cmd_line.length()+1];
+    if(_isBackgroundCommand(cmd_line)){
+        type = Background;
+        char new_cmd_line[strlen(cmd_line)];
         strcpy(new_cmd_line, cmd_line);
         _removeBackgroundSign(new_cmd_line);
-        this->run_cmd = string(new_cmd_line);
+        run_cmd = string(new_cmd_line);
     }
-    else this->run_cmd = this->cmd_line;
+    else {
+        type = Foreground;
+        run_cmd = this->cmd_line;
+    }
+    _parseCommandLine(run_cmd.c_str(),args);
 }
 void ExternalCommand::execute(){
 // TODO: add your implementation
@@ -204,13 +239,55 @@ void ExternalCommand::execute(){
         assert(0);
     }
 }
+RedirectionCommand::RedirectionCommand(const char* cmd_line, SmallShell* smash_p):
+    Command(cmd_line), append(false), fd(-1), smash_p(smash_p){
+        bool is_bg = false;
+        char cmd_line_cpy[strlen(cmd_line)];
+        strcpy(cmd_line_cpy, cmd_line);
+        _removeFirstOfSign(cmd_line_cpy, ">");
+        if(_isRedirectonCommand(cmd_line_cpy)){
+            append = true;
+            _removeFirstOfSign(cmd_line_cpy, ">");
+        }
+        if(_isBackgroundCommand(cmd_line_cpy)){
+            _removeBackgroundSign(cmd_line_cpy);
+            is_bg = true;
+        }
+        int argn = _parseCommandLine(cmd_line_cpy, args);
+        out_file_path = args[argn-1];
+        string  new_cmd = _rtrim(string(cmd_line_cpy));
+        cout << cmd_line_cpy << endl;
+        cmd = smash_p->CreateCommand(new_cmd.c_str());
+        if(cmd != nullptr) 
+            cmd->type = is_bg ? Background : Foreground;
+    }
+void RedirectionCommand::execute(){
+    pid_t c_pid = fork();
+    if(c_pid == 0){
+        if(cmd == nullptr) exit(0);
+        setpgrp();
+        prepare();
+        cmd->execute();
+        cleanup();
+        exit(0);
+    }else waitpid(c_pid, nullptr, 0);
+}
+void RedirectionCommand::prepare() {
+    int flags = append ? (O_CREAT | O_WRONLY | O_APPEND) :
+                            (O_CREAT | O_WRONLY | O_TRUNC);
+    close(1);
+    fd = open(out_file_path, flags, 0666);
+}
+void RedirectionCommand::cleanup() {
+    if(fd > 0) close(fd);
+}
+PipeCommand::PipeCommand(const char* cmd_line):Command(cmd_line){}
+void PipeCommand::execute(){}
 
 void GetCurrDirCommand::execute(){
 // TODO: test
-    cout << _getCurrDir() << "\n";
+    cout << _getCurrDir() << endl;
 }
-
-
 
 void GetDirContentCommand::execute(){
 // TODO: add your implementation
@@ -219,7 +296,7 @@ void GetDirContentCommand::execute(){
     if (n < 0) perror("smash error: scandir failed");
     else{
         for (int i = 0; i < n; i++){
-            cout << namelist[i]->d_name << "\n";
+            cout << namelist[i]->d_name << endl;
             free(namelist[i]);
         }
     }
@@ -235,11 +312,12 @@ void ChangePromptCommand::execute(){
 
 void ShowPidCommand::execute(){
 
-    cout << "smash pid is " << getpid() << "\n";
+    cout << "smash pid is " << getpid() << endl;
 }
-ChangeDirCommand::ChangeDirCommand(const char *cmd_line, std::string plastPwd):BuiltInCommand(cmd_line),old(plastPwd){}
+
+ChangeDirCommand::ChangeDirCommand(const char *cmd_line, string plastPwd):BuiltInCommand(cmd_line),old(plastPwd){}
 void ChangeDirCommand::execute(){
-    std::string oldpath = get_current_dir_name();
+    string oldpath = get_current_dir_name();
     const vector<string> s=explode(cmd_line,' ');
     if(args[2]){                                                    // Too many args
         perror("smash error: cd: too many arguments");
@@ -252,7 +330,7 @@ void ChangeDirCommand::execute(){
             p[s[1].length()]=0;
             if(s[1]=="-"){
                 if(old==""){
-                    std::cerr<<"smash error: cd: OLDPWD not set"<<std::endl;
+                    cerr<<"smash error: cd: OLDPWD not set"<<endl;
                 }else{
                     char p[old.length()+1];
                     for (unsigned int i = 0; i < old.length()+1; i++) {
@@ -310,7 +388,7 @@ void ForegroundCommand::execute(){
 // TODO: test
     jobs->removeFinishedJobs();
     if(args[1]){
-        if(_isNumber(string(args[1]))) job_id = std::stoi(args[1]);
+        if(_isNumber(string(args[1]))) job_id = stoi(args[1]);
         else{
             perror("smash error: fg: invalid arguments");
             return;
@@ -326,7 +404,7 @@ void ForegroundCommand::execute(){
         perror(error_s.c_str());
         return;
     }
-    cout << cmd_line.c_str() << " : " << job->pid << "\n";
+    cout << cmd_line.c_str() << " : " << job->pid << endl;
     if(job->execution_state == Waiting){
         jobs->switchJobOn(job, true);
     }else{
@@ -338,7 +416,7 @@ void ForegroundCommand::execute(){
 
 void QuitCommand::execute(){
     if(args[1] && strcmp(args[1],"kill") == 0){
-        cout << "sending SIGKILL signal to " << smash_p->jobs.free_job_ids.back() -1 << " jobs:\n";
+        cout << "sending SIGKILL signal to " << smash_p->jobs.free_job_ids.back() -1 << " jobs:" << endl;
         smash_p->jobs.killAllJobs();
     }
     //Kill smash
@@ -353,40 +431,48 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     char* args[COMMAND_MAX_ARGS];
     if(!_parseCommandLine(cmd_line, args)) return nullptr;
     string cmd_s(args[0]);
-    while(_isBackgroundCommand(args[0])) _removeBackgroundSign(args[0]);
-    if ((string("pwd").find(cmd_s) && (args[0][3] == ' ')) || (cmd_s == "pwd")){
-        return new GetCurrDirCommand(cmd_line);
+    if(_isBackgroundCommand(args[0])) _removeBackgroundSign(args[0]);
+    if(_isPipeCommand(cmd_line)){
+        return new PipeCommand(cmd_line);
+    }
+    else if(_isRedirectonCommand(cmd_line)){
+        return new RedirectionCommand(cmd_line, this);
+    }
+    else if ((string("pwd").find(cmd_s) && (args[0][3] == ' ')) || (cmd_s == "pwd")){
+        return new GetCurrDirCommand(cmd_line); //Need to change the output
     }
     else if ((string("chprompt").find(cmd_s) && (args[0][8] == ' ')) || (cmd_s == "chprompt")){
-        return new ChangePromptCommand(cmd_line, this);
+        return new ChangePromptCommand(cmd_line, this); //Need to change the input
     }
        else if ((string("ls").find(cmd_s) && (args[0][2] == ' ')) || (cmd_s == "ls")){
-        return new GetDirContentCommand(cmd_line);
+        return new GetDirContentCommand(cmd_line); //Need to change the output
     }
     else if ((string("showpid").find(cmd_s) && (args[0][7] == ' ')) || (cmd_s == "showpid")) {
-        return new ShowPidCommand(cmd_line);
+        return new ShowPidCommand(cmd_line); //Need to change the output
     }
     else if ((string("cd").find(cmd_s) && (args[0][2] == ' ')) || (cmd_s == "cd")) {
-        return new ChangeDirCommand(cmd_line, oldp);
+        return new ChangeDirCommand(cmd_line, oldp); //Need to change the input
     }
     else if ((string("jobs").find(cmd_s) && (args[0][4] == ' ')) || (cmd_s == "jobs")){
-        return new JobsCommand(cmd_line, &jobs);
+        return new JobsCommand(cmd_line, &jobs); //Need to change the input + output
     }
     else if ((string("fg").find(cmd_s) && (args[0][2] == ' ')) || (cmd_s == "fg")){
-        return new ForegroundCommand(cmd_line, &jobs);
+        return new ForegroundCommand(cmd_line, &jobs); //Need to change the input
     }
     else if ((string("quit").find(cmd_s) && (args[0][4] == ' ')) || (cmd_s == "quit")){
-        return new QuitCommand(cmd_line, this);
+        return new QuitCommand(cmd_line, this); //Need to change the input
     }
-
     else {
-    return new ExternalCommand(cmd_line, this);
+        //cout << "INFO: Executing with bash." << endl;
+    return new ExternalCommand(cmd_line, this); //Need to change the input + output
     }
 }
 
 void SmallShell::executeCommand(const char *cmd_line) {
     // TODO: Add your implementation here
     // for example:
+
+
     Command* cmd = CreateCommand(cmd_line);
     //jobs.removeFinishedJobs();
     if(cmd) cmd->execute();

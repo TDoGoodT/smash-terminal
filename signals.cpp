@@ -11,11 +11,10 @@ using namespace std;
 
 void ctrlZHandler(int sig_num){
 	// TODO: Add your implementation
-    std::cout << "\nsmash: got ctrl-Z in ";
+    std::cout << "\nsmash: got ctrl-Z" << std::endl;
     SmallShell& smash = SmallShell::getInstance();
     JobsList::JobEntry* job = smash.jobs.popFg();
     if(!job){
-      cout << std::endl;
       return;
     }
     kill(job->pid*(-1), sig_num);
@@ -24,11 +23,10 @@ void ctrlZHandler(int sig_num){
 }
 
 void ctrlCHandler(int sig_num){
-    std::cout << "\nsmash: got ctrl-C in ";
+    std::cout << "\nsmash: got ctrl-C" << std::endl;
     SmallShell& smash = SmallShell::getInstance();
     JobsList::JobEntry* job = smash.jobs.popFg();
     if(!job){
-      cout << std::endl;
       return;
     }
     assert(sig_num == SIGINT);
