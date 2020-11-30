@@ -178,6 +178,32 @@ void _execCmd(string run_cmd){
         EXEC(*argv, argv);
         assert(0);
 }
+
+string _makeCmdTimout(vector<string> cmd_line, time_t * time){
+    //cout << cmd_line[0] <<  cmd_line[1] << endl;
+    try{
+            time_t cmd_time = (time_t) stol(cmd_line[1]);
+            if(cmd_time < 0){
+                cerr << ("smash error: timeout: invalid argumetns") << endl;
+                return NULL;    
+            }else{
+                *time = cmd_time;
+            }
+    }
+    catch(std::invalid_argument& e){
+            cerr << ("smash error: timeout: invalid argumetns") << endl;
+            return NULL;
+    }
+    assert((cmd_line[0] == string("timeout")));
+    cmd_line[0] = "";
+    cmd_line[1] = "";
+    std::string s;
+    for (const auto &piece : cmd_line){
+        s += piece;
+        s += " ";
+    }
+    return s;
+}
 // TODO: Add your implementation for classes in Commands.h
 
 SmallShell::SmallShell():
@@ -203,7 +229,7 @@ void SmallShell::addJob(Command* cmd,  pid_t pid, bool isStopped)
 }*/
 BuiltInCommand::BuiltInCommand(const char* cmd_line, string orig_cmd):
     Command(cmd_line, orig_cmd) {
-    assert(_isBackgroundCommand(cmd_line) == false);//_removeBackgroundSign(new_cmd_line);
+    //assert(_isBackgroundCommand(cmd_line) == false);//_removeBackgroundSign(new_cmd_line);
     type = Foreground;
     _parseCommandLine(cmd_line,args);
     this->cmd_line = string(cmd_line);
@@ -233,7 +259,6 @@ void ExternalCommand::execute(){
     if(smash_p->pid == getpid()){
         pid_t c_pid = fork();
         if(c_pid > 0){
-            //assert(smash_p->jobs.fg_job == nullptr);
             if(smash_p->pid){
                 JobsList::JobEntry* new_job;
                 if(type == Foreground){
@@ -249,7 +274,8 @@ void ExternalCommand::execute(){
             setpgrp();
             _execCmd(run_cmd);
         }
-    }else{
+    }
+    else{
         _execCmd(run_cmd);
     }
 }
@@ -302,7 +328,7 @@ void RedirectionCommand::cleanup() {
         dup2(old_fd,1); //copy stdout back to 1
         close(old_fd);
     }
-    
+
 }
 PipeCommand::PipeCommand(const char* cmd_line, SmallShell* smash_p, string orig_cmd):
     Command(cmd_line, orig_cmd), errPipe(false), smash_p(smash_p){
@@ -377,14 +403,25 @@ void GetDirContentCommand::execute(){
 // TODO: add your implementation
     struct dirent **namelist;
     int n = scandir(".", &namelist, 0, alphasort);
-    if (n < 0) cerr << ("smash error: scandir failed") << endl;
-    else{
-        for (int i = 2; i < n; i++){
-            cout << namelist[i]->d_name << endl;
-            free(namelist[i]);
+    if (n < 0) {
+        cerr << ("smash error: scandir failed") << endl;
+        return;
+    }
+    vector<string> dir;
+    while(n--){
+        //DEBUG_PRINT << namelist[n]->d_name << endl;
+        string d_name(namelist[n]->d_name);
+        if((d_name != string(".")) && (d_name != string(".."))){
+            dir.push_back(d_name);
+            free(namelist[n]);
         }
     }
-    free(namelist);
+    free(namelist);    
+    std::sort(dir.begin(),dir.end());
+    for(auto file : dir){
+        cout << file << endl;
+    }
+    
 }
 
 
@@ -464,7 +501,8 @@ void ChangeDirCommand::execute(){
 
 
 TimeoutCommand::TimeoutCommand(const char* cmd_line,SmallShell* shell,string orig_cmd)
-    :BuiltInCommand(cmd_line,orig_cmd),shell(shell){
+    :Command(cmd_line,orig_cmd), shell(shell), stopped_time(0){
+        const vector<string> s = explode(cmd_line,' ');
         char cmd_line_cpy[strlen(cmd_line)];
         type = Foreground;
         strcpy(cmd_line_cpy, cmd_line);
@@ -473,25 +511,46 @@ TimeoutCommand::TimeoutCommand(const char* cmd_line,SmallShell* shell,string ori
             type = Background;
             _removeFirstOfSign(cmd_line_cpy, "&");
         }
-        string  new_cmd(_makeCmdTimout(cmd_line_cpy));
-        if(type == Background) new_cmd += "&";
+        string  new_cmd = _makeCmdTimout(s,&duration);
+        //if(type == Background) new_cmd += "&";
         cmd = shell->CreateCommand(new_cmd.c_str(), orig_cmd);
+        if(type == Background) cmd->type = Background;
+
 }
 void TimeoutCommand::execute(){
+    if(!cmd) {
+        cerr << " smash error: timeout: invalid arguments" << endl;
+        return;
+    }
     const vector<string> s = explode(cmd_line,' ');
-    unsigned int val;
-    pid_t p = fork();
-    if(p > 0){ //Father will do it : wait the time needed and stop the child
-        std::istringstream reader(s[1]);
-        reader >> val;
-        std::cout << val << std::endl;
-        alarm(val);
-        std::cout << "father" << std::endl;
-    }else{  //Child will do it untill the father stop him
-        std::cout << "Child" << std::endl;
-            setpgrp();
-            cmd->execute();
-            exit(0);
+    bool new_alarm = true;
+    start_time = time(nullptr);
+    pid = fork();
+    if(pid > 0){ //Father will do it : wait the time needed and stop the child
+        time_t last_alarm = (time_t) alarm((unsigned int)duration);
+        TimedCommandsPair new_timed_cmd(start_time + duration, this);
+        shell->timed_cmds.insert(new_timed_cmd);
+        if(last_alarm > 0 && new_timed_cmd.first > (last_alarm + start_time)){
+            //There are earlier alarms
+            alarm(last_alarm + difftime(start_time, time(nullptr)));
+            new_alarm = false;
+        }
+        if(type == Foreground){
+            JobsList::JobEntry* new_job = new JobsList::JobEntry(0, pid, Running, this);
+            shell->jobs.fg_job = new_job;
+            int wstatus = shell->jobs.waitForJob(new_job);
+            if(WIFEXITED(wstatus) || WIFSIGNALED(wstatus)){
+                shell->timed_cmds.erase(new_timed_cmd);
+                if(new_alarm) alarm(last_alarm - difftime(time(nullptr),start_time));
+            }
+        }else{
+            shell->jobs.addJob(this, pid);
+        }
+    }
+    else{  //Child will do it untill the father stop him
+        setpgrp();
+        cmd->execute();
+        exit(0);
     }
 }
 
@@ -503,11 +562,11 @@ void KillCommand::execute(){
         cerr << ("smash error: kill: invalid arguments") << endl;
         }
     else{
-        int sig;
-        int id;
+        int sig = -1;
+        int id = -1;
         try{
-            sig = stoi(s[1]);
             id = stoi(s[2]);
+            sig = stoi(s[1]);
             sig = sig * (-1);
             pid_t p;
             JobsList::JobEntry * job = jobs->getJobById(id);
@@ -664,7 +723,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line, string orig_cmd) {
        else if ((string("ls").find(cmd_s) && (args[0][2] == ' ')) || (cmd_s == "ls")){
         return new GetDirContentCommand(cmd_line, orig_cmd); //Need to change the output
     }
-       else if(string("timeout").find(cmd_s) || (cmd_s == "timeout"))  {
+       else if((string("timeout").find(cmd_s) && (args[0][2] == ' ')) || (cmd_s == "timeout"))  {
         return new TimeoutCommand(cmd_line,this,orig_cmd); //Need to change the output
     }
     else if ((string("showpid").find(cmd_s) && (args[0][7] == ' ')) || (cmd_s == "showpid")) {

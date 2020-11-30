@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <set>
 #include <list>
 #include <iostream>
 #include <assert.h>
@@ -17,13 +18,14 @@
 
 using std::string;
 using std::vector;
+using std::set;
+using std::pair;
 using std::map;
 using std::list;
 using std::istream;
 using std::ostream;
 enum Type {Foreground, Background};
 enum ExecState {/*Ready,*/ Running, Waiting};
-
 class SmallShell;
 class Command {
     // TODO: Add your data members
@@ -171,9 +173,6 @@ public:
     JobEntry*           fg_job;
     int                 jobs_n;
     int _getValidJobId(){
-        //int ret = free_job_ids.back();
-        //free_job_ids.pop_back();
-        //return ret;
         jobs_n++;
         for(int i = MAX_NUM_PROC; i > 0; i--) {
             if(jobs_map[i] != nullptr){
@@ -184,10 +183,9 @@ public:
         return jobs_n;
     }
 public:
-    JobsList(): jobs_map(), jobs_n(0){ //free_job_ids(), jobs_map(){
+    JobsList(): jobs_map(), jobs_n(0){
         jobs_map[0] = nullptr;
         for(int i = MAX_NUM_PROC; i > 0; i--) {
-            //free_job_ids.push_back(i);
             jobs_map[i] = nullptr;
         }
     }
@@ -205,7 +203,6 @@ public:
         }
 
         jobs_map[new_job_id] = new_job;
-        //jobs_n++;
         return new_job;
     }
 
@@ -239,6 +236,7 @@ public:
         }
     }
     JobEntry * getJobById(int jobId){
+        if(jobId <= 0) return nullptr;
         return jobs_map[jobId];
     }
     void removeJobById(int jobId){
@@ -249,7 +247,6 @@ public:
                 if(job->execution_state == Waiting) waiting_queue.remove(job);
                 else running_queue.remove(job);
                 jobs_map.erase(jobId);
-                //free_job_ids.push_back(jobId);
                 if(job == fg_job) fg_job = nullptr;
                 else jobs_n--;
                 delete job;
@@ -324,7 +321,6 @@ public:
         if(!job) return;
         if(fg_job == job) {
             fg_job = nullptr;
-            //jobs_n++;
             if(job->job_id == 0){
                 job->job_id = _getValidJobId();
                 jobs_map[job->job_id] = job;
@@ -342,7 +338,6 @@ public:
             assert(fg_job == nullptr);
             job->cmd->type = Foreground;
             fg_job = job;
-            //jobs_n--;
         }
         waiting_queue.remove(job);
         running_queue.push_back(job);
@@ -356,24 +351,23 @@ public:
         }
         return nullptr;
     }
-    void waitForJob(JobsList::JobEntry* job){
+    int waitForJob(JobsList::JobEntry* job){
         assert(job->cmd->type == Foreground);
         assert(fg_job == job);
-        //std::cerr << "Waiting for pid:" << job->pid << std::endl;
-        int wstatus = -1;         
+        int wstatus = -1;
         int w = waitpid(job->pid, &wstatus,  WUNTRACED);
         if (w == -1) {
             std::cerr << job->cmd->cmd_line << " pid:" << job->pid << std::endl;
             perror("waitpid");
+            return -1;
         }
         if (WIFEXITED(wstatus) || WIFSIGNALED(wstatus)) removeJob(job);
         else if (WIFSTOPPED(wstatus)){
-            //std::cout << "here";
             job->execution_state = Waiting;
             job->cmd->type = Background;
             insertJob(job);
-            //break;
         }
+        return wstatus;
     }
 };
 
@@ -420,25 +414,32 @@ public:
     void execute() override;
 };
 
-// TODO: add more classes if needed
-// maybe timeout ?
 
-class TimeoutCommand : public BuiltInCommand{
+class TimeoutCommand : public Command{
     SmallShell *shell;
     Command *cmd;
+    time_t duration;
+    time_t start_time;
+    time_t stopped_time;
 public:
-    TimeoutCommand(const char* cmd_line,SmallShell *shell,string orig_cmd);
+    pid_t pid;
+    TimeoutCommand(const char* cmd_line, SmallShell *shell, string orig_cmd);
     virtual ~TimeoutCommand(){}
     void execute() override;
 };
 
+typedef pair<time_t,TimeoutCommand*> TimedCommandsPair;
+typedef set<TimedCommandsPair> TimedCommandsSet;
+
 class SmallShell {
+public:
 private:
 // TODO: Add your data members
     string name;
     SmallShell();
 public:
     static std::string oldp;
+    TimedCommandsSet timed_cmds; //first -> remaining time, second -> Cmd
     JobsList jobs;
     pid_t   pid;
     Command *CreateCommand(const char* cmd_line, string orig_cmd = "");
