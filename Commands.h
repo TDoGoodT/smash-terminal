@@ -165,27 +165,19 @@ public:
 // TODO: Add your data members
     list<JobEntry*>     waiting_queue;
     list<JobEntry*>     running_queue;
-    //vector<int>         free_job_ids;
+    vector<int>         free_job_ids;
     map<int,JobEntry*>  jobs_map;
     JobEntry*           fg_job;
-    int                 jobs_n;
     int _getValidJobId(){
-        //int ret = free_job_ids.back();
-        //free_job_ids.pop_back();
-        //return ret;
-        for(int i = MAX_NUM_PROC; i > 0; i--) {
-            if(jobs_map[i] != nullptr){
-                return ++i;
-            }
-        }
-        assert(jobs_n == 0);
-        return 1;
+        int ret = free_job_ids.back();
+        free_job_ids.pop_back();
+        return ret;
     }
 public:
-    JobsList(): jobs_map(), jobs_n(0){ //free_job_ids(), jobs_map(){
+    JobsList(): free_job_ids(), jobs_map(){
         jobs_map[0] = nullptr;
         for(int i = MAX_NUM_PROC; i > 0; i--) {
-            //free_job_ids.push_back(i);
+            free_job_ids.push_back(i);
             jobs_map[i] = nullptr;
         }
     }
@@ -203,7 +195,6 @@ public:
         }
 
         jobs_map[new_job_id] = new_job;
-        jobs_n++;
         return new_job;
     }
 
@@ -247,9 +238,8 @@ public:
                 if(job->execution_state == Waiting) waiting_queue.remove(job);
                 else running_queue.remove(job);
                 jobs_map.erase(jobId);
-                //free_job_ids.push_back(jobId);
+                free_job_ids.push_back(jobId);
                 if(job == fg_job) fg_job = nullptr;
-                else jobs_n--;
                 delete job;
             }
         }else{
@@ -313,7 +303,6 @@ public:
     void insertNewJob(JobEntry* job){
         assert(jobs_map[job->job_id] == nullptr);
         job->job_id = _getValidJobId();
-        jobs_n++;
         jobs_map[job->job_id] = job;
         auto proc_list = job->execution_state == Waiting ? &waiting_queue : &running_queue;
         proc_list->push_back(job);
@@ -322,7 +311,6 @@ public:
         if(!job) return;
         if(fg_job == job) {
             fg_job = nullptr;
-            jobs_n++;
             if(job->job_id == 0){
                 job->job_id = _getValidJobId();
                 jobs_map[job->job_id] = job;
@@ -340,7 +328,6 @@ public:
             assert(fg_job == nullptr);
             job->cmd->type = Foreground;
             fg_job = job;
-            jobs_n--;
         }
         waiting_queue.remove(job);
         running_queue.push_back(job);
@@ -357,8 +344,7 @@ public:
     void waitForJob(JobsList::JobEntry* job){
         assert(job->cmd->type == Foreground);
         assert(fg_job == job);
-        std::cerr << "Waiting for pid:" << job->pid << std::endl;
-        int wstatus = -1;         
+        int wstatus = -1;
         int w = waitpid(job->pid, &wstatus,  WUNTRACED);
         if (w == -1) {
             perror("waitpid");
@@ -419,6 +405,22 @@ public:
 
 // TODO: add more classes if needed
 // maybe timeout ?
+
+class TimeoutCommand : public BuiltInCommand{
+    SmallShell *shell;
+    Command *cmd;
+public:
+    TimeoutCommand(const char* cmd_line,SmallShell *shell,string orig_cmd);
+    virtual ~TimeoutCommand(){}
+    void execute() override;
+};
+
+class CopyCommand : public Command{
+public:
+    CopyCommand(const char* cmd_line);
+    virtual ~CopyCommand(){}
+    void execute() override;
+};
 
 class SmallShell {
 private:
