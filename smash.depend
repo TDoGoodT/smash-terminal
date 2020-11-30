@@ -1,5 +1,5 @@
 # depslib dependency file v1.0
-1606685497 source:/home/student/OS/vscode/hw1/HW1_OS/Commands.cpp
+1606725445 source:/home/student/OS/vscode/hw1/HW1_OS/Commands.cpp
 	<dirent.h>
 	<algorithm>
 	<unistd.h>
@@ -17,7 +17,7 @@
 	<fcntl.h>
 	"Commands.h"
 
-1606686165 /home/student/OS/vscode/hw1/HW1_OS/Commands.h
+1606688953 /home/student/OS/vscode/hw1/HW1_OS/Commands.h
 	<sys/wait.h>
 	<numeric>
 	<vector>
