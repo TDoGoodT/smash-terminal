@@ -460,13 +460,11 @@ void ChangeDirCommand::execute(){
             return;
         }
     }
-
-
 }
 
 
 TimeoutCommand::TimeoutCommand(const char* cmd_line,SmallShell* shell,string orig_cmd)
-: BuiltInCommand(cmd_line,orig_cmd),shell(shell){
+    :BuiltInCommand(cmd_line,orig_cmd),shell(shell){
         char cmd_line_cpy[strlen(cmd_line)];
         type = Foreground;
         strcpy(cmd_line_cpy, cmd_line);
@@ -477,7 +475,7 @@ TimeoutCommand::TimeoutCommand(const char* cmd_line,SmallShell* shell,string ori
         }
         string  new_cmd(_makeCmdTimout(cmd_line_cpy));
         if(type == Background) new_cmd += "&";
-        cmd = shell->CreateCommand(new_cmd.c_str(), this->orig_cmd_line);
+        cmd = shell->CreateCommand(new_cmd.c_str(), orig_cmd);
 }
 void TimeoutCommand::execute(){
     const vector<string> s = explode(cmd_line,' ');
@@ -496,7 +494,6 @@ void TimeoutCommand::execute(){
             exit(0);
     }
 }
-
 
 KillCommand::KillCommand(const char* cmd_line,JobsList *jobs, string orig_cmd):
     BuiltInCommand(cmd_line, orig_cmd),jobs(jobs){}

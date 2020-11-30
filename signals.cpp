@@ -18,7 +18,7 @@ void ctrlZHandler(int sig_num)
     if(!job){
       return;
     }
-    kill(job->pid*(-1), SIGSTOP);
+    kill(job->pid*(-1), SIGTSTP);
     std::cout << "smash: process " << job->pid << " was stopped" << std::endl;
 }
 
