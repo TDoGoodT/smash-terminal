@@ -254,7 +254,7 @@ void ExternalCommand::execute(){
     }
 }
 RedirectionCommand::RedirectionCommand(const char* cmd_line, SmallShell* smash_p, string orig_cmd):
-    Command(cmd_line, orig_cmd), append(false), fd(-1), smash_p(smash_p){
+    Command(cmd_line, orig_cmd), append(false), fd(-1), old_fd(-1), smash_p(smash_p){
         char cmd_line_cpy[strlen(cmd_line)];
         type = Foreground;
         strcpy(cmd_line_cpy, cmd_line);
@@ -281,35 +281,28 @@ RedirectionCommand::RedirectionCommand(const char* cmd_line, SmallShell* smash_p
         cmd = smash_p->CreateCommand(new_cmd.c_str(), this->orig_cmd_line);
     }
 void RedirectionCommand::execute(){
-    pid_t c_pid = fork();
-    if(c_pid > 0){ //father = smash
-        //assert(smash_p->jobs.fg_job == nullptr);
-        if(type == Foreground){
-            JobsList::JobEntry * new_job = new JobsList::JobEntry(0, c_pid, Running, this);
-            smash_p->jobs.fg_job = new_job;
-            DEBUG_PRINT << "Created new fake job. pid:" << c_pid <<endl;
-            smash_p->jobs.waitForJob(new_job);
-        }else{
-            smash_p->jobs.addJob(this, c_pid);
-        }
-    }
-    else{
-        //child
-        setpgrp();
-        prepare();
-        cmd->execute();
-        cleanup();
-        exit(0);
-    }
+    prepare();
+    if(fd > 0) cmd->execute();
+    cleanup();
 }
 void RedirectionCommand::prepare() {
     int flags = append ? (O_CREAT | O_WRONLY | O_APPEND) :
                             (O_CREAT | O_WRONLY | O_TRUNC);
-    close(1);
     fd = open(out_file_path.c_str(), flags, 0666);
+    if(fd > 0){ //if open succeded
+        old_fd = dup(1); //save stdout fd in old_fd
+        close(1); //close stdout
+        dup2(fd,1);
+    }
 }
 void RedirectionCommand::cleanup() {
-    if(fd > 0) close(fd);
+    if(fd > 0) {
+        close(fd); //close the file
+        close(1);
+        dup2(old_fd,1); //copy stdout back to 1
+        close(old_fd);
+    }
+    
 }
 PipeCommand::PipeCommand(const char* cmd_line, SmallShell* smash_p, string orig_cmd):
     Command(cmd_line, orig_cmd), errPipe(false), smash_p(smash_p){
@@ -321,7 +314,7 @@ PipeCommand::PipeCommand(const char* cmd_line, SmallShell* smash_p, string orig_
             _removeFirstOfSign(cmd_line_cpy, "&");
             errPipe = true;
         }
-        
+
         if(_isBackgroundCommand(cmd_line_cpy)){
             _removeFirstOfSign(cmd_line_cpy, "&");
             type = Background;
@@ -351,7 +344,7 @@ void PipeCommand::execute(){
         int fd[2];
         pipe(fd); // first child out --> second child in
         pid_t c_pid1 = fork();
-        if (c_pid1 == 0) {// first child 
+        if (c_pid1 == 0) {// first child
             if(errPipe) dup2(fd[1],2);
             else dup2(fd[1],1);
             close(fd[0]);
@@ -370,7 +363,7 @@ void PipeCommand::execute(){
         close(fd[0]);
         close(fd[1]);
         waitpid(c_pid1, nullptr, 0);
-        waitpid(c_pid2, nullptr, 0);        
+        waitpid(c_pid2, nullptr, 0);
         exit(0);
     }
 }
@@ -544,12 +537,12 @@ void BackgroundCommand::execute(){
         }else{
             if(s.size()==1){ // No Parameter
                 int id;
-                JobsList::JobEntry *job = jobs->getLastJob(&id);
+                JobsList::JobEntry *job = jobs->getLastStoppedJob(&id);
                 if(job){
                     cout << job->cmd->orig_cmd_line << " : " << job->pid << endl;
                     job->execution_state = Running;
                     if(kill(job->pid*(-1),SIGCONT) < 0){
-                        cerr << ("smash error: kill faiked") << endl;
+                        cerr << ("smash error: kill failed") << endl;
                         return;
                     }
                 }else{
@@ -603,7 +596,7 @@ void ForegroundCommand::execute(){
         job->cmd->type = Foreground;
         jobs->setFg(job);
     }
-    jobs->waitForJob(job);
+    if(getpid() == smash_p->pid) jobs->waitForJob(job);
 }
 
 void QuitCommand::execute(){
@@ -650,7 +643,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line, string orig_cmd) {
         return new JobsCommand(cmd_line, &jobs, orig_cmd); //Need to change the input + output
     }
     else if ((string("fg").find(cmd_s) && (args[0][2] == ' ')) || (cmd_s == "fg")){
-        return new ForegroundCommand(cmd_line, &jobs, orig_cmd); //Need to change the input
+        return new ForegroundCommand(cmd_line, this, &jobs, orig_cmd); //Need to change the input
     }
     else if ((string("quit").find(cmd_s) && (args[0][4] == ' ')) || (cmd_s == "quit")){
         return new QuitCommand(cmd_line, this, orig_cmd); //Need to change the input
