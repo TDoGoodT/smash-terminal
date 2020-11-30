@@ -45,3 +45,50 @@
 	"Commands.h"
 	"signals.h"
 
+1606761812 source:/home/student/OS/vscode/HW1_OS/signals.cpp
+	<iostream>
+	<signal.h>
+	<sys/types.h>
+	<unistd.h>
+	"signals.h"
+	"Commands.h"
+
+1606769172 /home/student/OS/vscode/HW1_OS/Commands.h
+	<sys/wait.h>
+	<numeric>
+	<vector>
+	<string>
+	<map>
+	<set>
+	<list>
+	<iostream>
+	<assert.h>
+
+1606762023 source:/home/student/OS/vscode/HW1_OS/smash.cpp
+	<iostream>
+	<unistd.h>
+	<sys/wait.h>
+	<signal.h>
+	"Commands.h"
+	"signals.h"
+
+1606769149 source:/home/student/OS/vscode/HW1_OS/Commands.cpp
+	<dirent.h>
+	<algorithm>
+	<unistd.h>
+	<string>
+	<string.h>
+	<iostream>
+	<vector>
+	<sstream>
+	<iomanip>
+	<signal.h>
+	<string>
+	<stdlib.h>
+	<sys/types.h>
+	<sys/stat.h>
+	<fcntl.h>
+	"Commands.h"
+
+1606674358 /home/student/OS/vscode/HW1_OS/signals.h
+
