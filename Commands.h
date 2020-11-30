@@ -423,6 +423,15 @@ public:
 // TODO: add more classes if needed
 // maybe timeout ?
 
+class TimeoutCommand : public BuiltInCommand{
+    SmallShell *shell;
+    Command *cmd;
+public:
+    TimeoutCommand(const char* cmd_line,SmallShell *shell,string orig_cmd);
+    virtual ~TimeoutCommand(){}
+    void execute() override;
+};
+
 class SmallShell {
 private:
 // TODO: Add your data members
@@ -450,3 +459,4 @@ public:
 };
 
 #endif //SMASH_COMMAND_H_
+

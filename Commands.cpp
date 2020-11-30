@@ -464,6 +464,40 @@ void ChangeDirCommand::execute(){
 
 }
 
+
+TimeoutCommand::TimeoutCommand(const char* cmd_line,SmallShell* shell,string orig_cmd)
+: BuiltInCommand(cmd_line,orig_cmd),shell(shell){
+        char cmd_line_cpy[strlen(cmd_line)];
+        type = Foreground;
+        strcpy(cmd_line_cpy, cmd_line);
+
+        if(_isBackgroundCommand(cmd_line_cpy)){
+            type = Background;
+            _removeFirstOfSign(cmd_line_cpy, "&");
+        }
+        string  new_cmd(_makeCmdTimout(cmd_line_cpy));
+        if(type == Background) new_cmd += "&";
+        cmd = shell->CreateCommand(new_cmd.c_str(), this->orig_cmd_line);
+}
+void TimeoutCommand::execute(){
+    const vector<string> s = explode(cmd_line,' ');
+    unsigned int val;
+    pid_t p = fork();
+    if(p > 0){ //Father will do it : wait the time needed and stop the child
+        std::istringstream reader(s[1]);
+        reader >> val;
+        std::cout << val << std::endl;
+        alarm(val);
+        std::cout << "father" << std::endl;
+    }else{  //Child will do it untill the father stop him
+        std::cout << "Child" << std::endl;
+            setpgrp();
+            cmd->execute();
+            exit(0);
+    }
+}
+
+
 KillCommand::KillCommand(const char* cmd_line,JobsList *jobs, string orig_cmd):
     BuiltInCommand(cmd_line, orig_cmd),jobs(jobs){}
 void KillCommand::execute(){
@@ -633,6 +667,9 @@ Command * SmallShell::CreateCommand(const char* cmd_line, string orig_cmd) {
        else if ((string("ls").find(cmd_s) && (args[0][2] == ' ')) || (cmd_s == "ls")){
         return new GetDirContentCommand(cmd_line, orig_cmd); //Need to change the output
     }
+       else if(string("timeout").find(cmd_s) || (cmd_s == "timeout"))  {
+        return new TimeoutCommand(cmd_line,this,orig_cmd); //Need to change the output
+    }
     else if ((string("showpid").find(cmd_s) && (args[0][7] == ' ')) || (cmd_s == "showpid")) {
         return new ShowPidCommand(cmd_line, orig_cmd, this); //Need to change the output
     }
@@ -666,4 +703,3 @@ void SmallShell::executeCommand(const char *cmd_line) {
     if(cmd) cmd->execute();
     //delete cmd;
 }
-
