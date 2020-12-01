@@ -45,7 +45,7 @@
 	"Commands.h"
 	"signals.h"
 
-1606781722 source:/home/student/OS/vscode/HW1_OS/signals.cpp
+1606856177 source:/home/student/OS/vscode/HW1_OS/signals.cpp
 	<iostream>
 	<signal.h>
 	<sys/types.h>
@@ -53,9 +53,10 @@
 	"signals.h"
 	"Commands.h"
 
-1606769172 /home/student/OS/vscode/HW1_OS/Commands.h
+1606862344 /home/student/OS/vscode/HW1_OS/Commands.h
 	<sys/wait.h>
 	<numeric>
+	<algorithm>
 	<vector>
 	<string>
 	<map>

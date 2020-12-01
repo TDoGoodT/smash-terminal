@@ -1,5 +1,4 @@
 #include <dirent.h>
-#include <algorithm>
 #include <unistd.h>
 #include <string>
 #include <string.h>
@@ -180,22 +179,18 @@ void _execCmd(string run_cmd){
 }
 
 string _makeCmdTimout(vector<string> cmd_line, time_t * time){
-    //cout << cmd_line[0] <<  cmd_line[1] << endl;
     if(cmd_line.size() < 3){
-        //cerr << ("smash error: timeout: invalid arguments") << endl;
         return "";
     }
     try{
             time_t cmd_time = (time_t) stol(cmd_line[1]);
             if(cmd_time < 0){
-                //cerr << ("smash error: timeout: invalid arguments") << endl;
                 return "";
             }else{
                 *time = cmd_time;
             }
     }
     catch(std::invalid_argument& e){
-            //cerr << ("smash error: timeout: invalid arguments") << endl;
             return "";
     }
     assert((cmd_line[0] == string("timeout")));
@@ -208,13 +203,14 @@ string _makeCmdTimout(vector<string> cmd_line, time_t * time){
     }
     return s;
 }
-// TODO: Add your implementation for classes in Commands.h
 
 SmallShell::SmallShell():
-    name("smash"), jobs(), pid(getpid()){}
+    name("smash"), jobs(), pid(getpid()),
+    oldout_fd(-1){}
 
 SmallShell::~SmallShell() {
 // TODO: add your implementation
+    jobs.killAllJobs();
 }
 const string SmallShell::getName()
 {
@@ -320,17 +316,22 @@ void RedirectionCommand::prepare() {
                             (O_CREAT | O_WRONLY | O_TRUNC);
     fd = open(out_file_path.c_str(), flags, 0666);
     if(fd > 0){ //if open succeded
-        old_fd = dup(1); //save stdout fd in old_fd
-        close(1); //close stdout
-        dup2(fd,1);
+        smash_p->oldout_fd = dup(1); //save current stdout_fd in old_fd
+        int temp = dup2(fd, 1); //close 1 and put there new file
+        assert(temp == 1);
+        close(fd);
+    }else{
+        perror("smash error: open failed");
+        //return to stdout
+
     }
 }
 void RedirectionCommand::cleanup() {
     if(fd > 0) {
-        close(fd); //close the file
-        close(1);
-        dup2(old_fd,1); //copy stdout back to 1
-        close(old_fd);
+        //close(1);
+        dup2(smash_p->oldout_fd,1); //copy stdout back to 1
+        close(smash_p->oldout_fd);
+        smash_p->oldout_fd = -1;
     }
 
 }
@@ -358,9 +359,15 @@ PipeCommand::PipeCommand(const char* cmd_line, SmallShell* smash_p, string orig_
         cmd2 = smash_p->CreateCommand(cmd_line2.c_str(), this->orig_cmd_line);
     }
 void PipeCommand::execute(){
-    pid_t c_pid;
-    c_pid = fork();
+    if(!(cmd1 && cmd2)) return;
+    int fd[2];
+    pipe(fd); // first child out --> second child in
+    DEBUG_PRINT << "Before" << endl;
+    pid_t c_pid = fork();
+    
     if(c_pid > 0){ //father = smash
+        close(fd[0]);
+        close(fd[1]);
         if(type == Foreground){
             JobsList::JobEntry * new_job = new JobsList::JobEntry(0, c_pid, Running, this);
             smash_p->jobs.fg_job = new_job;
@@ -368,32 +375,41 @@ void PipeCommand::execute(){
         }else{
             smash_p->jobs.addJob(this, c_pid);
         }
+        DEBUG_PRINT << "After" << endl;
     }
-    else{ //child = pipe command
+    else{ //child = pipe process
         setpgrp();
-        int fd[2];
-        pipe(fd); // first child out --> second child in
         pid_t c_pid1 = fork();
+        if(c_pid1 < 0){
+            perror("smash error: fork failed");
+            exit(0);
+        }
         if (c_pid1 == 0) {// first child
+            close(fd[0]);
             if(errPipe) dup2(fd[1],2);
             else dup2(fd[1],1);
-            close(fd[0]);
             close(fd[1]);
-            cmd1->execute();
-            exit(0);
+            if(cmd1) cmd1->execute();
+        }else{ //pipe process
+            pid_t c_pid2 = fork();
+            if(c_pid2 < 0){
+                perror("smash error: fork failed");
+                exit(0);
+            }
+            if (c_pid2 == 0) {// second child
+                close(fd[1]);
+                dup2(fd[0],0);
+                close(fd[0]);
+                if(cmd2) cmd2->execute();
+            }
+            //pipe process
+            else{
+                close(fd[0]);
+                close(fd[1]);
+                waitpid(c_pid2, nullptr, WUNTRACED);
+            }
+            waitpid(c_pid1, nullptr, WUNTRACED);
         }
-        pid_t c_pid2 = fork();
-        if (c_pid2 == 0) {// second child
-            dup2(fd[0],0);
-            close(fd[0]);
-            close(fd[1]);
-            cmd2->execute();
-            exit(0);
-        }
-        close(fd[0]);
-        close(fd[1]);
-        waitpid(c_pid1, nullptr, 0);
-        waitpid(c_pid2, nullptr, 0);
         exit(0);
     }
 }
@@ -408,7 +424,7 @@ void GetDirContentCommand::execute(){
     struct dirent **namelist;
     int n = scandir(".", &namelist, 0, alphasort);
     if (n < 0) {
-        cerr << ("smash error: scandir failed") << endl;
+        perror("smash error: scandir failed");
         return;
     }
     vector<string> dir;
@@ -445,8 +461,8 @@ BuiltInCommand(cmd_line, orig_cmd),old(plastPwd){}
 void ChangeDirCommand::execute(){
     std::string oldpath = get_current_dir_name();
     const vector<string> s=explode(cmd_line,' ');
-    if(args[2]){                                                    // Too many args
-        cerr << ("smash error: cd: too many arguments") <<endl;
+    if(s.size() > 2){                                                    // Too many args
+        cout << ("smash error: cd: too many arguments") <<endl;
     }else{                                                          //Less then 2 arguments
         if(args[1]){                                                //Exacly 2 arguments
             char p[s[1].length()+1];
@@ -456,7 +472,7 @@ void ChangeDirCommand::execute(){
             p[s[1].length()]=0;
             if(s[1]=="-"){
                 if(old==""){
-                    cerr << "smash error: cd: OLDPWD not set" << endl;
+                    cout << "smash error: cd: OLDPWD not set" << endl;
                 }else{
                     char p[old.length()+1];
                     for (unsigned int i = 0; i < old.length()+1; i++) {
@@ -468,12 +484,12 @@ void ChangeDirCommand::execute(){
                     if ((new_arr = (char *)malloc((size_t)size)) != NULL) {
                         tmp = getcwd(new_arr, (size_t) size);
                         if(!tmp){
-                            cerr << ("smash error: getcwd failed") << endl;
+                            perror("smash error: getcwd failed");
                             return;
                         }
                     }
                     if(chdir(p)!=0){
-                        cerr << ("smash error: chdir failed") << endl;
+                        perror("smash error: chdir failed");
                         return;
                     }
                     SmallShell::oldp=tmp;
@@ -486,12 +502,12 @@ void ChangeDirCommand::execute(){
                 if ((new_arr = (char *)malloc((size_t)size)) != NULL) {
                     tmp = getcwd(new_arr, (size_t) size);
                     if(!tmp){
-                        cerr << ("smash error: getcwd failed") << endl;
+                        perror("smash error: getcwd failed");
                         return;
                     }
                 }
                 if(chdir(p) != 0){
-                    cerr << ("smash error: chdir failed") << endl;
+                    perror("smash error: chdir failed");
                     return;
                 }
                 SmallShell::oldp = tmp;
@@ -516,25 +532,17 @@ TimeoutCommand::TimeoutCommand(const char* cmd_line,SmallShell* shell,string ori
         _removeFirstOfSign(cmd_line_cpy, "&");
     }
     string  new_cmd = _makeCmdTimout(s,&duration);
-    //if(type == Background) new_cmd += "&";
     if(new_cmd != ""){
         cmd = shell->CreateCommand(new_cmd.c_str(), orig_cmd);
         if(type == Background) cmd->type = Background;
-    }
+    }else cmd = nullptr;
 }
 void TimeoutCommand::execute(){
     if(!cmd) {
-        cerr << "smash error: timeout: invalid arguments" << endl;
+        cout << "smash error: timeout: invalid arguments" << endl;
         return;
     }
     const vector<string> s = explode(cmd_line,' ');
-    try{
-
-    }catch(std::invalid_argument& e){
-        cerr << "smash error: timeout: invalid arguments" << endl;
-        return;
-    }
-    //bool new_alarm = true;
     start_time = time(nullptr);
     pid = fork();
     if(pid > 0){ //Father will do it : wait the time needed and stop the child
@@ -569,7 +577,7 @@ KillCommand::KillCommand(const char* cmd_line,JobsList *jobs, string orig_cmd):
 void KillCommand::execute(){
     const vector<string> s = explode(cmd_line,' ');
     if(s.size() != 3){
-        cerr << ("smash error: kill: invalid arguments") << endl;
+        cout << ("smash error: kill: invalid arguments") << endl;
         }
     else{
         int sig = -1;
@@ -577,23 +585,27 @@ void KillCommand::execute(){
         try{
             id = stoi(s[2]);
             sig = stoi(s[1]);
+            if(!(sig < 0)){
+                cout << ("smash error: kill: invalid arguments") << endl;
+                return;
+            }
             sig = sig * (-1);
             pid_t p;
             JobsList::JobEntry * job = jobs->getJobById(id);
             if(job!=nullptr){
                 p = job->pid;
                 if(kill(p*(-1),sig) == -1){
-                    cerr << ("smash error: kill failed") << endl;
+                    perror("smash error: kill failed");
                 }else{
                     cout << "signal number " << sig << " was sent to pid " << p << endl;
                 }
                 jobs->removeFinishedJobs();
             }else{
-                cerr << "smash error: kill: job-id " << id << " does not exist" << endl;
+                cout << "smash error: kill: job-id " << id << " does not exist" << endl;
             }
             return;
         }catch(std::invalid_argument& e){
-            cerr << ("smash error: kill: invalid arguments") << endl;
+            cout << ("smash error: kill: invalid arguments") << endl;
             return;
         }
     }
@@ -605,7 +617,7 @@ void BackgroundCommand::execute(){
     jobs->removeFinishedJobs();
     const vector<string> s = explode(cmd_line,' ');
     if(s.size()>2){ //Too much parameters
-        cerr << ("smash error: bg: invalid arguments") << endl;
+        cout << ("smash error: bg: invalid arguments") << endl;
         return;
     }else{ //Less then two parameters
         if(s.size()==2){ //exacly two parameters
@@ -616,22 +628,22 @@ void BackgroundCommand::execute(){
                 JobsList::JobEntry *job = jobs->getJobById(id);
                 if(job){
                     if(job->execution_state==Running){
-                        cerr << "smash error: bg: job-id "  << id << " is already running in the background"<< endl;
+                        cout << "smash error: bg: job-id "  << id << " is already running in the background"<< endl;
                         return;
                     }
                     std::cout << job->cmd->orig_cmd_line << " : " << job->pid << std::endl;
                     job->execution_state = Running;
                     if(kill(job->pid*(-1),SIGCONT) < 0){
-                        cerr << ("smash error: kill failed") << endl;
+                        perror("smash error: kill failed");
                         return;
                     }
 
                 }else{
-                   cerr << "smash error: bg: job-id " << id << " does not exist" << endl;
+                   cout << "smash error: bg: job-id " << id << " does not exist" << endl;
                    return;
                 }
             }catch(std::invalid_argument& e){
-                cerr << ("smash error: bg: invalid arguments") << endl;
+                cout << ("smash error: bg: invalid arguments") << endl;
                 return;
             }
         }else{
@@ -641,16 +653,17 @@ void BackgroundCommand::execute(){
                 if(job){
                     cout << job->cmd->orig_cmd_line << " : " << job->pid << endl;
                     job->execution_state = Running;
+                    job->start_time = time(nullptr);
                     if(kill(job->pid*(-1),SIGCONT) < 0){
-                        cerr << ("smash error: kill failed") << endl;
+                        perror("smash error: kill failed");
                         return;
                     }
                 }else{
-                    cerr << ("smash error: bg: there is no stopped jobs to resume") << endl;
+                    cout << ("smash error: bg: there is no stopped jobs to resume") << endl;
                     return;
                 }
             }else{
-                cerr << ("smash error: bg: invalid arguments") << endl;
+                cout << ("smash error: bg: invalid arguments") << endl;
                 return;
             }
         }
@@ -671,22 +684,23 @@ void ForegroundCommand::execute(){
         try{
             job_id = stoi(args[1]);
             if(job_id <= 0){
-                cerr << string("smash error: fg: job-id ") + to_string(job_id) + string( " does not exist") << endl;
+                cout << string("smash error: fg: job-id ") + to_string(job_id) + string( " does not exist") << endl;
                 return;
             }
         }catch(std::invalid_argument& e){
-            cerr << ("smash error: fg: invalid arguments") << endl;
+            cout << ("smash error: fg: invalid arguments") << endl;
             return;
         }
     }else if(args[1] && args[2]){
-        cerr << ("smash error: fg: invalid arguments") << endl;
+        cout << ("smash error: fg: invalid arguments") << endl;
         return;
     }
+
     JobsList::JobEntry* job = (job_id > 0) ? jobs->getJobById(job_id): jobs->getLastJob(&job_id);
     if(!job){
         string error_s = (job_id == 0)  ? string("smash error: fg: jobs list is empty") :
                                     string("smash error: fg: job-id ") + to_string(job_id) + string( " does not exist");
-        cerr << (error_s.c_str()) << endl;
+        cout << (error_s.c_str()) << endl;
         return;
     }
     cout << job->cmd->orig_cmd_line << " : " << job->pid << endl;
@@ -759,6 +773,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line, string orig_cmd) {
         return new BackgroundCommand(cmd_line, &jobs, orig_cmd); //Need to change the input
     }
     else {
+        //DEBUG_PRINT << "Runing with bash" << endl;
     return new ExternalCommand(cmd_line, this, orig_cmd); //Need to change the input + output
     }
 }
@@ -766,7 +781,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line, string orig_cmd) {
 void SmallShell::executeCommand(const char *cmd_line) {
     // TODO: Add your implementation here
     Command* cmd = CreateCommand(cmd_line, "");
-    jobs.removeFinishedJobs();
+    //jobs.removeFinishedJobs();
     if(cmd) cmd->execute();
     //delete cmd;
 }
