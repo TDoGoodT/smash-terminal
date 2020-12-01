@@ -45,7 +45,7 @@
 	"Commands.h"
 	"signals.h"
 
-1606761812 source:/home/student/OS/vscode/HW1_OS/signals.cpp
+1606781722 source:/home/student/OS/vscode/HW1_OS/signals.cpp
 	<iostream>
 	<signal.h>
 	<sys/types.h>
@@ -72,7 +72,7 @@
 	"Commands.h"
 	"signals.h"
 
-1606769149 source:/home/student/OS/vscode/HW1_OS/Commands.cpp
+1606781417 source:/home/student/OS/vscode/HW1_OS/Commands.cpp
 	<dirent.h>
 	<algorithm>
 	<unistd.h>

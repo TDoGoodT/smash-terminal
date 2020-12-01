@@ -181,18 +181,22 @@ void _execCmd(string run_cmd){
 
 string _makeCmdTimout(vector<string> cmd_line, time_t * time){
     //cout << cmd_line[0] <<  cmd_line[1] << endl;
+    if(cmd_line.size() < 3){
+        //cerr << ("smash error: timeout: invalid arguments") << endl;
+        return "";
+    }
     try{
             time_t cmd_time = (time_t) stol(cmd_line[1]);
             if(cmd_time < 0){
-                cerr << ("smash error: timeout: invalid argumetns") << endl;
-                return NULL;    
+                //cerr << ("smash error: timeout: invalid arguments") << endl;
+                return "";
             }else{
                 *time = cmd_time;
             }
     }
     catch(std::invalid_argument& e){
-            cerr << ("smash error: timeout: invalid argumetns") << endl;
-            return NULL;
+            //cerr << ("smash error: timeout: invalid arguments") << endl;
+            return "";
     }
     assert((cmd_line[0] == string("timeout")));
     cmd_line[0] = "";
@@ -416,12 +420,12 @@ void GetDirContentCommand::execute(){
             free(namelist[n]);
         }
     }
-    free(namelist);    
+    free(namelist);
     std::sort(dir.begin(),dir.end());
     for(auto file : dir){
         cout << file << endl;
     }
-    
+
 }
 
 
@@ -502,28 +506,35 @@ void ChangeDirCommand::execute(){
 
 TimeoutCommand::TimeoutCommand(const char* cmd_line,SmallShell* shell,string orig_cmd)
     :Command(cmd_line,orig_cmd), shell(shell), stopped_time(0){
-        const vector<string> s = explode(cmd_line,' ');
-        char cmd_line_cpy[strlen(cmd_line)];
-        type = Foreground;
-        strcpy(cmd_line_cpy, cmd_line);
+    const vector<string> s = explode(cmd_line,' ');
+    char cmd_line_cpy[strlen(cmd_line)];
+    type = Foreground;
+    strcpy(cmd_line_cpy, cmd_line);
 
-        if(_isBackgroundCommand(cmd_line_cpy)){
-            type = Background;
-            _removeFirstOfSign(cmd_line_cpy, "&");
-        }
-        string  new_cmd = _makeCmdTimout(s,&duration);
-        //if(type == Background) new_cmd += "&";
+    if(_isBackgroundCommand(cmd_line_cpy)){
+        type = Background;
+        _removeFirstOfSign(cmd_line_cpy, "&");
+    }
+    string  new_cmd = _makeCmdTimout(s,&duration);
+    //if(type == Background) new_cmd += "&";
+    if(new_cmd != ""){
         cmd = shell->CreateCommand(new_cmd.c_str(), orig_cmd);
         if(type == Background) cmd->type = Background;
-
+    }
 }
 void TimeoutCommand::execute(){
     if(!cmd) {
-        cerr << " smash error: timeout: invalid arguments" << endl;
+        cerr << "smash error: timeout: invalid arguments" << endl;
         return;
     }
     const vector<string> s = explode(cmd_line,' ');
-    bool new_alarm = true;
+    try{
+
+    }catch(std::invalid_argument& e){
+        cerr << "smash error: timeout: invalid arguments" << endl;
+        return;
+    }
+    //bool new_alarm = true;
     start_time = time(nullptr);
     pid = fork();
     if(pid > 0){ //Father will do it : wait the time needed and stop the child
@@ -532,17 +543,16 @@ void TimeoutCommand::execute(){
         shell->timed_cmds.insert(new_timed_cmd);
         if(last_alarm > 0 && new_timed_cmd.first > (last_alarm + start_time)){
             //There are earlier alarms
-            alarm(last_alarm + difftime(start_time, time(nullptr)));
-            new_alarm = false;
+            alarm((unsigned int)(last_alarm));
         }
         if(type == Foreground){
             JobsList::JobEntry* new_job = new JobsList::JobEntry(0, pid, Running, this);
             shell->jobs.fg_job = new_job;
             int wstatus = shell->jobs.waitForJob(new_job);
             if(WIFEXITED(wstatus) || WIFSIGNALED(wstatus)){
-                shell->timed_cmds.erase(new_timed_cmd);
-                if(new_alarm) alarm(last_alarm - difftime(time(nullptr),start_time));
+                return;
             }
+            assert(0);
         }else{
             shell->jobs.addJob(this, pid);
         }
@@ -583,7 +593,7 @@ void KillCommand::execute(){
             }
             return;
         }catch(std::invalid_argument& e){
-            cerr << ("smash error: kill: invalid argumetns") << endl;
+            cerr << ("smash error: kill: invalid arguments") << endl;
             return;
         }
     }
@@ -691,6 +701,7 @@ void ForegroundCommand::execute(){
 
 void QuitCommand::execute(){
     if(args[1] && strcmp(args[1],"kill") == 0){
+        smash_p->jobs.removeFinishedJobs();
         cout << "smash: sending SIGKILL signal to " << smash_p->jobs.jobs_n << " jobs:" << endl;
         smash_p->jobs.killAllJobs();
     }
