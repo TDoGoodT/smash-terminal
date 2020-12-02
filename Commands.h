@@ -179,6 +179,7 @@ public:
     int _getValidJobId(){
         int x = (jobs_n++ == 0) ? 1 : getMaxIdx() + 1;
         //cout << x << endl;
+        //cout << "N=" << jobs_n << endl;
         return x;
     }
 public:
@@ -200,9 +201,15 @@ public:
         return new_job;
     }
     int getMaxIdx(){
-        if(jobs_map.begin() == jobs_map.end()) return -1;
+        if(jobs_map.empty()) return 0;
         auto x = max_element(jobs_map.begin(), jobs_map.end(),
                 [] (const pair<int, JobEntry*> & a, const pair<int, JobEntry*> & b){ return a.first < b.first;});
+        if(x->second == nullptr){
+            jobs_map.erase(x->first);
+            if(jobs_map.empty()) return 0;
+            return getMaxIdx();
+        }
+        assert((x->second != nullptr));
         return x->first;
     }
     int getMinIdx(){
@@ -266,6 +273,7 @@ public:
             if(job){
                 if(job->execution_state == Waiting) waiting_queue.remove(job);
                 else running_queue.remove(job);
+                if(job->job_id != 0) jobs_map.erase(job->job_id);
                 delete job;
                 fg_job = nullptr;
             }
@@ -281,9 +289,11 @@ public:
     void killJobById(int job_id){
         JobEntry* job_to_kill = jobs_map[job_id];
         if(job_to_kill){
-            if(kill(job_to_kill->pid*(-1),0) == 0) removeJob(job_to_kill);
-            else if(kill(job_to_kill->pid*(-1),SIGKILL) < 0) perror("smash error: kill failed");
-            else std::cout << job_to_kill->pid << ": " << job_to_kill->cmd->cmd_line << std::endl;
+            if(kill(job_to_kill->pid*(-1),SIGKILL) < 0) perror("smash error: kill failed");
+            else{
+                removeJob(job_to_kill);
+                std::cout << job_to_kill->pid << ": " << job_to_kill->cmd->cmd_line << std::endl;
+            }
         }
     }
     JobEntry * getLastJob(int* lastJobId = nullptr){
@@ -333,6 +343,7 @@ public:
     }
     void insertNewJob(JobEntry* job){
         assert(jobs_map[job->job_id] == nullptr);
+        removeFinishedJobs();
         job->job_id = _getValidJobId();
         jobs_map[job->job_id] = job;
         auto proc_list = job->execution_state == Waiting ? &waiting_queue : &running_queue;

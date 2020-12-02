@@ -432,21 +432,14 @@ void GetDirContentCommand::execute(){
         perror("smash error: scandir failed");
         return;
     }
-    vector<string> dir;
-    while(n--){
-        //DEBUG_PRINT << namelist[n]->d_name << endl;
-        string d_name(namelist[n]->d_name);
+    for(int i = 0; i < n; i++){
+        string d_name(namelist[i]->d_name);
         if((d_name != string(".")) && (d_name != string(".."))){
-            dir.push_back(d_name);
-            free(namelist[n]);
+            cout << d_name << endl;
+            free(namelist[i]);
         }
     }
     free(namelist);
-    std::sort(dir.begin(),dir.end());
-    for(auto file : dir){
-        cout << file << endl;
-    }
-
 }
 
 
