@@ -53,7 +53,7 @@
 	"signals.h"
 	"Commands.h"
 
-1606872180 /home/student/OS/vscode/HW1_OS/Commands.h
+1606874857 /home/student/OS/vscode/HW1_OS/Commands.h
 	<sys/wait.h>
 	<numeric>
 	<algorithm>
@@ -73,9 +73,8 @@
 	"Commands.h"
 	"signals.h"
 
-1606781417 source:/home/student/OS/vscode/HW1_OS/Commands.cpp
+1606875427 source:/home/student/OS/vscode/HW1_OS/Commands.cpp
 	<dirent.h>
-	<algorithm>
 	<unistd.h>
 	<string>
 	<string.h>

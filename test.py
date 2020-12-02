@@ -155,22 +155,19 @@ def unified_diff(a, b, n=3):
                 for line in b[j1:j2]:
                     yield createLine(j1, False, line)
 
-# Returns true if test passed
+
 def diff(expected, actual):
     e = open(expected, 'r')
     a = open(actual, 'r')
     d = unified_diff([x.rstrip() for x in e.readlines()], [x.rstrip() for x in a.readlines()])
     diff_str = ''.join(d)
     if diff_str == '':
-        # print('Files are equal')
-        pass
+        print('Files are equal')
     else:
-        pass
-        # print('Files are different')
-        # print(diff_str)
+        print('Files are different')
+        print(diff_str)
     a.close()
     e.close()
-    return diff_str
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -201,35 +198,14 @@ def main():
                     run_test(args.smash, os.path.join(args.test, filename_no_ext), args.valgrind)
                     output = os.path.join(args.test, filename_no_ext + ".out")
                     exp = os.path.join(args.test, filename_no_ext + ".exp")
-                    if diff(exp, output) == '':
-                        print('Files are equal')
-                        continue
-
-                    good = False
-                    for i in range(10):
-                        exp_filename = filename_no_ext + ".exp" + str(i)
-                        if exp_filename in files:
-                            exp = os.path.join(args.test, exp_filename)
-                            if diff(exp, output) == '':
-                                print('Files are equal')
-                                good = True
-                                break
-                    if not good:
-                        print('Files are different')
-                        exp_filename = filename_no_ext + ".exp1"
-                        if exp_filename in files:
-                            exp = os.path.join(args.test, exp_filename)
-                            print(diff(exp, output)) #FOR DEBUGGING
+                    diff(exp, output)
         return
 
     else:
         output = args.test + ".out"
-        exp = args.test + ".exp1"
+        exp = args.test + ".exp"
         run_test(args.smash, args.test, args.valgrind)
-        diff_res = diff(exp, output)
-        if diff_res != '':
-            print('Files are different')
-            print(diff_res)
+        diff(exp, output)
 
 
 if __name__ == "__main__":

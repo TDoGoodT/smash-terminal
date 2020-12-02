@@ -199,13 +199,13 @@ public:
     }
     int getMaxIdx(){
         if(jobs_map.begin() == jobs_map.end()) return -1;
-        auto x = max_element(jobs_map.begin(), jobs_map.end(), 
+        auto x = max_element(jobs_map.begin(), jobs_map.end(),
                 [] (const pair<int, JobEntry*> & a, const pair<int, JobEntry*> & b){ return a.first < b.first;});
         return x->first;
     }
     int getMinIdx(){
         if(jobs_map.begin() == jobs_map.end()) return -1;
-        auto x = max_element(jobs_map.begin(), jobs_map.end(), 
+        auto x = max_element(jobs_map.begin(), jobs_map.end(),
                 [] (const pair<int, JobEntry*> & a, const pair<int, JobEntry*> & b){ return a.first > b.first;});
         return x->first;
     }
@@ -230,13 +230,16 @@ public:
         }
     }
     void removeFinishedJobs(){
+        list<int> jobs_to_remove;
         int wstatus = -1;
-        
-        for(auto job_it = jobs_map.begin(); job_it != jobs_map.end(); job_it++){
-            JobEntry* job = job_it->second;
+        for(auto job_it : jobs_map){
+            JobEntry* job = job_it.second;
             if((job != nullptr) && (kill(job->pid,0) == 0) && (waitpid(job->pid, &wstatus , WNOHANG) > 0)){
-                removeJobById(job->job_id);
+                jobs_to_remove.push_back(job->job_id);
             }
+        }
+        for(auto job_id : jobs_to_remove){
+            removeJobById(job_id);
         }
     }
     JobEntry * getJobById(int jobId){

@@ -410,6 +410,7 @@ void PipeCommand::execute(){
             }
             waitpid(c_pid1, nullptr, WUNTRACED);
         }
+        wait(NULL);
         exit(0);
     }
 }
@@ -733,11 +734,11 @@ Command * SmallShell::CreateCommand(const char* cmd_line, string orig_cmd) {
     if(!_parseCommandLine(cmd_line, args)) return nullptr;
     string cmd_s(args[0]);
     if(_isBackgroundCommand(args[0])) _removeBackgroundSign(args[0]);
-    if(_isPipeCommand(cmd_line)){
-        return new PipeCommand(cmd_line, this, orig_cmd);
-    }
-    else if(_isRedirectonCommand(cmd_line)){
+    if(_isRedirectonCommand(cmd_line)){
         return new RedirectionCommand(cmd_line, this, orig_cmd);
+    }
+    else if(_isPipeCommand(cmd_line)){
+        return new PipeCommand(cmd_line, this, orig_cmd);
     }
     else if ((string("pwd").find(cmd_s) && (args[0][3] == ' ')) || (cmd_s == "pwd")){
         return new GetCurrDirCommand(cmd_line, orig_cmd); //Need to change the output
