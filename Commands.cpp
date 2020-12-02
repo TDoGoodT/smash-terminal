@@ -322,8 +322,9 @@ void RedirectionCommand::prepare() {
         close(fd);
     }else{
         perror("smash error: open failed");
-        //return to stdout
-
+        dup2(smash_p->oldout_fd,1); //copy stdout back to 1
+        close(smash_p->oldout_fd);
+        smash_p->oldout_fd = -1;
     }
 }
 void RedirectionCommand::cleanup() {
@@ -360,14 +361,11 @@ PipeCommand::PipeCommand(const char* cmd_line, SmallShell* smash_p, string orig_
     }
 void PipeCommand::execute(){
     if(!(cmd1 && cmd2)) return;
-    int fd[2];
-    pipe(fd); // first child out --> second child in
+
     //DEBUG_PRINT << "Before" << endl;
     pid_t c_pid = fork();
     
     if(c_pid > 0){ //father = smash
-        close(fd[0]);
-        close(fd[1]);
         if(type == Foreground){
             JobsList::JobEntry * new_job = new JobsList::JobEntry(0, c_pid, Running, this);
             smash_p->jobs.fg_job = new_job;
@@ -375,10 +373,13 @@ void PipeCommand::execute(){
         }else{
             smash_p->jobs.addJob(this, c_pid);
         }
-        //DEBUG_PRINT << "After" << endl;
     }
     else{ //child = pipe process
         setpgrp();
+        signal(SIGINT, SIG_DFL);
+        signal(SIGTSTP, SIG_DFL);
+        int fd[2];
+        pipe(fd); // first child out --> second child in
         pid_t c_pid1 = fork();
         if(c_pid1 < 0){
             perror("smash error: fork failed");
@@ -389,7 +390,9 @@ void PipeCommand::execute(){
             if(errPipe) dup2(fd[1],2);
             else dup2(fd[1],1);
             close(fd[1]);
+             //cout << "Here" << endl;
             if(cmd1) cmd1->execute();
+            exit(0);
         }else{ //pipe process
             pid_t c_pid2 = fork();
             if(c_pid2 < 0){
@@ -401,6 +404,7 @@ void PipeCommand::execute(){
                 dup2(fd[0],0);
                 close(fd[0]);
                 if(cmd2) cmd2->execute();
+                exit(0);
             }
             //pipe process
             else{
@@ -410,7 +414,7 @@ void PipeCommand::execute(){
             }
             waitpid(c_pid1, nullptr, WUNTRACED);
         }
-        wait(NULL);
+        //wait(NULL);
         exit(0);
     }
 }
@@ -577,6 +581,7 @@ KillCommand::KillCommand(const char* cmd_line,JobsList *jobs, string orig_cmd):
     BuiltInCommand(cmd_line, orig_cmd),jobs(jobs){}
 void KillCommand::execute(){
     const vector<string> s = explode(cmd_line,' ');
+    jobs->removeFinishedJobs();
     if(s.size() != 3){
         cout << ("smash error: kill: invalid arguments") << endl;
         }
@@ -600,7 +605,6 @@ void KillCommand::execute(){
                 }else{
                     cout << "signal number " << sig << " was sent to pid " << p << endl;
                 }
-                jobs->removeFinishedJobs();
             }else{
                 cout << "smash error: kill: job-id " << id << " does not exist" << endl;
             }
@@ -715,8 +719,8 @@ void ForegroundCommand::execute(){
 }
 
 void QuitCommand::execute(){
+    smash_p->jobs.removeFinishedJobs();
     if(args[1] && strcmp(args[1],"kill") == 0){
-        smash_p->jobs.removeFinishedJobs();
         cout << "smash: sending SIGKILL signal to " << smash_p->jobs.jobs_n << " jobs:" << endl;
         smash_p->jobs.killAllJobs();
     }
@@ -737,6 +741,9 @@ Command * SmallShell::CreateCommand(const char* cmd_line, string orig_cmd) {
     if(_isRedirectonCommand(cmd_line)){
         return new RedirectionCommand(cmd_line, this, orig_cmd);
     }
+    else if((string("timeout").find(cmd_s) && (args[0][2] == ' ')) || (cmd_s == "timeout"))  {
+        return new TimeoutCommand(cmd_line,this,orig_cmd); //Need to change the output
+    }
     else if(_isPipeCommand(cmd_line)){
         return new PipeCommand(cmd_line, this, orig_cmd);
     }
@@ -748,9 +755,6 @@ Command * SmallShell::CreateCommand(const char* cmd_line, string orig_cmd) {
     }
        else if ((string("ls").find(cmd_s) && (args[0][2] == ' ')) || (cmd_s == "ls")){
         return new GetDirContentCommand(cmd_line, orig_cmd); //Need to change the output
-    }
-       else if((string("timeout").find(cmd_s) && (args[0][2] == ' ')) || (cmd_s == "timeout"))  {
-        return new TimeoutCommand(cmd_line,this,orig_cmd); //Need to change the output
     }
     else if ((string("showpid").find(cmd_s) && (args[0][7] == ' ')) || (cmd_s == "showpid")) {
         return new ShowPidCommand(cmd_line, orig_cmd, this); //Need to change the output

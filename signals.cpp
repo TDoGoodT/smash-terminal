@@ -52,10 +52,11 @@ void alarmHandler(int sig_num)
     close(smash.oldout_fd);
     smash.oldout_fd = -1;
   }
+  smash.jobs.removeFinishedJobs();
   std::cout << "smash: got an alarm" << std::endl;
   auto cmd_to_kill = smash.timed_cmds.begin();
   if(cmd_to_kill != smash.timed_cmds.end()){
-    if(cmd_to_kill->second->pid != smash.pid){
+    if(cmd_to_kill->second->pid != smash.pid && kill(cmd_to_kill->second->pid, 0) == 0){
       int w = waitpid(cmd_to_kill->second->pid,nullptr,WNOHANG);
       if(w < 0) perror("smash error: waitpid failed");
       else if(w == 0){

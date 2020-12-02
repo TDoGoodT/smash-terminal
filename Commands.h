@@ -177,7 +177,9 @@ public:
     JobEntry*           fg_job;
     int                 jobs_n;
     int _getValidJobId(){
-        return (jobs_n++ == 0) ? 1 : getMaxIdx() + 1;
+        int x = (jobs_n++ == 0) ? 1 : getMaxIdx() + 1;
+        //cout << x << endl;
+        return x;
     }
 public:
     JobsList(): jobs_map(), jobs_n(0){}
@@ -387,7 +389,6 @@ public:
             job->cmd->type = Background;
             insertJob(job);
         }else{
-            //cerr << "Killing " << job->job_id << " : " <<job->pid << endl;
             removeJob(job);
         }
         return wstatus;
