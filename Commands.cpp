@@ -362,7 +362,7 @@ void PipeCommand::execute(){
     if(!(cmd1 && cmd2)) return;
     int fd[2];
     pipe(fd); // first child out --> second child in
-    DEBUG_PRINT << "Before" << endl;
+    //DEBUG_PRINT << "Before" << endl;
     pid_t c_pid = fork();
     
     if(c_pid > 0){ //father = smash
@@ -375,7 +375,7 @@ void PipeCommand::execute(){
         }else{
             smash_p->jobs.addJob(this, c_pid);
         }
-        DEBUG_PRINT << "After" << endl;
+        //DEBUG_PRINT << "After" << endl;
     }
     else{ //child = pipe process
         setpgrp();

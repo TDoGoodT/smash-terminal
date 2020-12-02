@@ -224,16 +224,17 @@ public:
         }
     }
     void killAllJobs(){
-        for(int i = getMinIdx(); i <= getMaxIdx() ; i++){ 
-            killJobById(i);
-            removeJobById(i);
+        for(auto job_it = jobs_map.begin(); job_it != jobs_map.end(); job_it++){
+            killJobById(job_it->first);
+            removeJobById(job_it->first);
         }
     }
     void removeFinishedJobs(){
         int wstatus = -1;
-        for(int i = getMinIdx(); i <= getMaxIdx(); i++){
-            JobEntry* job = jobs_map[i];
-            if((job != nullptr) && (waitpid(job->pid, &wstatus , WNOHANG) > 0)){
+        
+        for(auto job_it = jobs_map.begin(); job_it != jobs_map.end(); job_it++){
+            JobEntry* job = job_it->second;
+            if((job != nullptr) && (kill(job->pid,0) == 0) && (waitpid(job->pid, &wstatus , WNOHANG) > 0)){
                 removeJobById(job->job_id);
             }
         }
@@ -247,7 +248,7 @@ public:
         if(jobId > 0){
             job = jobs_map[jobId];
             if(job){
-                cerr << "DEBUG: Removing " << job->cmd->orig_cmd_line << endl;
+                //cerr << "DEBUG: Removing " << job->cmd->orig_cmd_line << endl;
                 if(job->execution_state == Waiting) waiting_queue.remove(job);
                 else running_queue.remove(job);
                 jobs_map.erase(jobId);
@@ -268,14 +269,15 @@ public:
     void removeJob(JobEntry* job){
         if(!job) { return; }
         else{
-            cerr << "Killing " << job->job_id << " : " <<job->pid << endl;
+            //cerr << "Killing " << job->job_id << " : " <<job->pid << endl;
             removeJobById(job->job_id);
         }
     }
     void killJobById(int job_id){
         JobEntry* job_to_kill = jobs_map[job_id];
         if(job_to_kill){
-            if(kill(job_to_kill->pid*(-1),SIGKILL) < 0) perror("smash error: kill failed");
+            if(kill(job_to_kill->pid*(-1),0) == 0) removeJob(job_to_kill);
+            else if(kill(job_to_kill->pid*(-1),SIGKILL) < 0) perror("smash error: kill failed");
             else std::cout << job_to_kill->pid << ": " << job_to_kill->cmd->cmd_line << std::endl;
         }
     }
@@ -382,7 +384,7 @@ public:
             job->cmd->type = Background;
             insertJob(job);
         }else{
-            cerr << "Killing " << job->job_id << " : " <<job->pid << endl;
+            //cerr << "Killing " << job->job_id << " : " <<job->pid << endl;
             removeJob(job);
         }
         return wstatus;
