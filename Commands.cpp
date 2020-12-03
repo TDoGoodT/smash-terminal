@@ -633,8 +633,8 @@ void CopyCommand::execute(){
         signal(SIGTSTP,SIG_DFL);
         signal(SIGINT,SIG_DFL);
         char * buff = new char[BUFSIZ];
-        while(read(fd_read, buff, 8) != 0){
-            if(write(fd_write, buff, 8) < 0){
+        while(read(fd_read, buff, 1) != 0){
+            if(write(fd_write, buff, 1) < 0){
                 perror("smash error: write failed");
                 close(fd_write);
                 close(fd_read);
