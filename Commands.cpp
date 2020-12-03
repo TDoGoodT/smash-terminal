@@ -582,7 +582,7 @@ CopyCommand::CopyCommand(const char* cmd_line, SmallShell * smash_p, string orig
     }
 void CopyCommand::execute(){
     vector<string> s = explode(cmd_line, ' ');
-    if(s.size() != 3){
+    if(s.size() < 3){
         perror("smash error: cp failed: Invalid arguments");
         return;
     }else if(s.size() == 3 && type == Background){
@@ -632,6 +632,7 @@ void CopyCommand::execute(){
         setpgrp();
         signal(SIGTSTP,SIG_DFL);
         signal(SIGINT,SIG_DFL);
+        signal(SIGALRM,SIG_DFL);
         char * buff = new char[BUFSIZ];
         while(read(fd_read, buff, 1) != 0){
             if(write(fd_write, buff, 1) < 0){
