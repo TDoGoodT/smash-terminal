@@ -216,6 +216,12 @@ public:
         if(jobs_map.begin() == jobs_map.end()) return -1;
         auto x = max_element(jobs_map.begin(), jobs_map.end(),
                 [] (const pair<int, JobEntry*> & a, const pair<int, JobEntry*> & b){ return a.first > b.first;});
+        if(x->second == nullptr){
+            jobs_map.erase(x->first);
+            if(jobs_map.empty()) return 0;
+            return getMinIdx();
+        }
+        assert((x->second != nullptr));
         return x->first;
     }
     void printJobsList(){
@@ -232,10 +238,10 @@ public:
             }
         }
     }
-    void killAllJobs(){
-        for(auto job_it = jobs_map.begin(); job_it != jobs_map.end(); job_it++){
-            killJobById(job_it->first);
-            removeJobById(job_it->first);
+    void killAllJobs(bool silent = false){
+        for(int i = 1; i <= getMaxIdx(); i++){
+            killJobById(i, silent);
+            //removeJobById(job_it->first);
         }
     }
     void removeFinishedJobs(){
@@ -286,13 +292,13 @@ public:
             removeJobById(job->job_id);
         }
     }
-    void killJobById(int job_id){
+    void killJobById(int job_id, bool silent = false){
         JobEntry* job_to_kill = jobs_map[job_id];
         if(job_to_kill){
+            if(!silent) std::cout << job_to_kill->pid << ": " << job_to_kill->cmd->cmd_line << std::endl;
             if(kill(job_to_kill->pid*(-1),SIGKILL) < 0) perror("smash error: kill failed");
             else{
                 removeJob(job_to_kill);
-                std::cout << job_to_kill->pid << ": " << job_to_kill->cmd->cmd_line << std::endl;
             }
         }
     }
@@ -463,6 +469,16 @@ public:
     void execute() override;
 };
 
+class CopyCommand : public BuiltInCommand{
+    string src_path;
+    string dest_path;
+    SmallShell * smash_p;
+public:
+    CopyCommand(const char* cmd_line, SmallShell * smash_p, string orig_cmd);
+    virtual ~CopyCommand(){}
+    void execute() override;
+};
+
 typedef pair<time_t,TimeoutCommand*> TimedCommandsPair;
 typedef set<TimedCommandsPair> TimedCommandsSet;
 
@@ -478,6 +494,7 @@ public:
     JobsList jobs;
     pid_t   pid;
     int oldout_fd;
+    int olderr_fd;
     Command *CreateCommand(const char* cmd_line, string orig_cmd = "");
     SmallShell(SmallShell const&)      = delete; // disable copy ctor
     void operator=(SmallShell const&)  = delete; // disable = operator
@@ -493,6 +510,19 @@ public:
     const string getName();
     const string setName(const string new_name = "smash");
     //void addJob(Command* cmd,  pid_t pid, bool isStopped = false);
+
+    void closeFiles(){
+        if(oldout_fd > 0) {
+            dup2(oldout_fd,1); //copy stdout back to 1
+            close(oldout_fd);
+            oldout_fd = -1;
+        }
+        if(olderr_fd > 0) {
+            dup2(olderr_fd,2); //copy stderr back to 2
+            close(olderr_fd);
+            olderr_fd = -1;
+        }
+    }
 };
 
 #endif //SMASH_COMMAND_H_

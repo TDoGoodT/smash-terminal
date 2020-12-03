@@ -9,14 +9,11 @@
 
 using namespace std;
 
+
 void ctrlZHandler(int sig_num)
 {
   SmallShell& smash = SmallShell::getInstance();
-  if(smash.oldout_fd > 0) {
-    dup2(smash.oldout_fd,1); //copy stdout back to 1
-    close(smash.oldout_fd);
-    smash.oldout_fd = -1;
-  }
+  smash.closeFiles();
   JobsList::JobEntry* job = smash.jobs.popFg();
   if(!job){
     std::cout << "smash: got ctrl-Z" << std::endl;
@@ -30,11 +27,7 @@ void ctrlZHandler(int sig_num)
 void ctrlCHandler(int sig_num)
 {
   SmallShell& smash = SmallShell::getInstance();
-  if(smash.oldout_fd > 0) {
-    dup2(smash.oldout_fd,1); //copy stdout back to 1
-    close(smash.oldout_fd);
-    smash.oldout_fd = -1;
-  }
+  smash.closeFiles();
   std::cout << "smash: got ctrl-C" << std::endl;
   JobsList::JobEntry* job = smash.jobs.popFg();
   if(!job){
@@ -47,11 +40,7 @@ void ctrlCHandler(int sig_num)
 void alarmHandler(int sig_num)
 {
   SmallShell& smash = SmallShell::getInstance();
-  if(smash.oldout_fd > 0) {
-    dup2(smash.oldout_fd,1); //copy stdout back to 1
-    close(smash.oldout_fd);
-    smash.oldout_fd = -1;
-  }
+  smash.closeFiles();
   smash.jobs.removeFinishedJobs();
   std::cout << "smash: got an alarm" << std::endl;
   auto cmd_to_kill = smash.timed_cmds.begin();

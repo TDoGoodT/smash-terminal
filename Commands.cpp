@@ -206,11 +206,11 @@ string _makeCmdTimout(vector<string> cmd_line, time_t * time){
 
 SmallShell::SmallShell():
     name("smash"), jobs(), pid(getpid()),
-    oldout_fd(-1){}
+    oldout_fd(-1), olderr_fd(-1){}
 
 SmallShell::~SmallShell() {
 // TODO: add your implementation
-    jobs.killAllJobs();
+    if(getpid() == pid) jobs.killAllJobs(true);
 }
 const string SmallShell::getName()
 {
@@ -361,10 +361,7 @@ PipeCommand::PipeCommand(const char* cmd_line, SmallShell* smash_p, string orig_
     }
 void PipeCommand::execute(){
     if(!(cmd1 && cmd2)) return;
-
-    //DEBUG_PRINT << "Before" << endl;
     pid_t c_pid = fork();
-    
     if(c_pid > 0){ //father = smash
         if(type == Foreground){
             JobsList::JobEntry * new_job = new JobsList::JobEntry(0, c_pid, Running, this);
@@ -376,8 +373,8 @@ void PipeCommand::execute(){
     }
     else{ //child = pipe process
         setpgrp();
-        signal(SIGINT, SIG_DFL);
-        signal(SIGTSTP, SIG_DFL);
+        //signal(SIGINT, SIG_DFL);
+        //signal(SIGTSTP, SIG_DFL);
         int fd[2];
         pipe(fd); // first child out --> second child in
         pid_t c_pid1 = fork();
@@ -410,9 +407,9 @@ void PipeCommand::execute(){
             else{
                 close(fd[0]);
                 close(fd[1]);
-                waitpid(c_pid2, nullptr, WUNTRACED);
+                waitpid(c_pid2, nullptr, 0);
+                waitpid(c_pid1, nullptr, 0);
             }
-            waitpid(c_pid1, nullptr, WUNTRACED);
         }
         //wait(NULL);
         exit(0);
@@ -570,6 +567,89 @@ void TimeoutCommand::execute(){
     }
 }
 
+CopyCommand::CopyCommand(const char* cmd_line, SmallShell * smash_p, string orig_cmd):
+        BuiltInCommand(cmd_line,orig_cmd), smash_p(smash_p){
+        if(_isBackgroundCommand(cmd_line)){
+            type = Background;
+            char new_cmd_line[strlen(cmd_line)];
+            strcpy(new_cmd_line, cmd_line);
+            _removeBackgroundSign(new_cmd_line);
+        }
+        else {
+            type = Foreground;
+        }
+        
+    }
+void CopyCommand::execute(){
+    vector<string> s = explode(cmd_line, ' ');
+    if(s.size() != 3){
+        perror("smash error: cp failed: Invalid arguments");
+        return;
+    }else if(s.size() == 3 && type == Background){
+        char tmp[s[2].length()+1];
+        strcpy(tmp, s[2].c_str());
+        _removeBackgroundSign(tmp);
+        s[2] = string(tmp);
+    }
+    char b_s1[PATH_MAX];
+    char b_s2[PATH_MAX];
+    char * src = (char *) realpath(src_path.c_str(), b_s1);
+    char * dst = (char *) realpath(dest_path.c_str(), b_s2);
+    if(src != nullptr && dst != nullptr && strcmp(src,dst) == 0){
+        cout << "smash: " << s[1] << " was copied to " << s[2] << endl;
+        return;
+    }
+    int fd_write = open(s[2].c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if(fd_write == -1){
+        DEBUG_PRINT << dst << endl;
+        perror("smash error: open failed write");
+        return;
+    }
+    int fd_read = open(s[1].c_str(), O_RDONLY);
+    if(fd_read == -1){
+        close(fd_write);
+        perror("smash error: open failed read");
+        return;
+    }
+    pid_t c_pid = fork();
+    if(c_pid < 0){
+        perror("smash error: fork failed");
+        return;
+    }
+    else if(c_pid > 0){ //father - smash
+        close(fd_write);
+        close(fd_read);
+        JobsList::JobEntry* new_job;
+        if(type == Foreground){
+            new_job = new JobsList::JobEntry(0, c_pid, Running, this);
+            smash_p->jobs.fg_job = new_job;
+            smash_p->jobs.waitForJob(new_job);
+        }else{
+            smash_p->jobs.addJob(this, c_pid);
+        }
+    }
+    else{ //child - copy
+        setpgrp();
+        signal(SIGTSTP,SIG_DFL);
+        signal(SIGINT,SIG_DFL);
+        char * buff = new char[BUFSIZ];
+        while(read(fd_read, buff, 8) != 0){
+            if(write(fd_write, buff, 8) < 0){
+                perror("smash error: write failed");
+                close(fd_write);
+                close(fd_read);
+                return;
+            }
+        }
+        delete buff;
+        cout << "smash: " << s[1] << " was copied to " << s[2] << endl;
+        close(fd_write);
+        close(fd_read);
+        exit(0);
+    }
+
+}
+
 KillCommand::KillCommand(const char* cmd_line,JobsList *jobs, string orig_cmd):
     BuiltInCommand(cmd_line, orig_cmd),jobs(jobs){}
 void KillCommand::execute(){
@@ -584,7 +664,7 @@ void KillCommand::execute(){
         try{
             id = stoi(s[2]);
             sig = stoi(s[1]);
-            if(!(sig < 0)){
+            if(!(-32 < sig  && sig < 0)){
                 cout << ("smash error: kill: invalid arguments") << endl;
                 return;
             }
@@ -734,11 +814,14 @@ Command * SmallShell::CreateCommand(const char* cmd_line, string orig_cmd) {
     if(_isRedirectonCommand(cmd_line)){
         return new RedirectionCommand(cmd_line, this, orig_cmd);
     }
-    else if((string("timeout").find(cmd_s) && (args[0][2] == ' ')) || (cmd_s == "timeout"))  {
+    else if((string("timeout").find(cmd_s) && (args[0][7] == ' ')) || (cmd_s == "timeout"))  {
         return new TimeoutCommand(cmd_line,this,orig_cmd); //Need to change the output
     }
     else if(_isPipeCommand(cmd_line)){
         return new PipeCommand(cmd_line, this, orig_cmd);
+    }
+    else if ((string("cp").find(cmd_s) && (args[0][2] == ' ')) || (cmd_s == "cp")){
+        return new CopyCommand(cmd_line, this, orig_cmd); //Need to change the output
     }
     else if ((string("pwd").find(cmd_s) && (args[0][3] == ' ')) || (cmd_s == "pwd")){
         return new GetCurrDirCommand(cmd_line, orig_cmd); //Need to change the output
