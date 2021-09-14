@@ -1,4 +1,4 @@
-# Testing Framework for OS 234123 - HW 1
+# Testing Framework for Smash 
 ## Created by Ronen Sandler and Amitai Frey
 
 ### Important
